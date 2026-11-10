@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dev Dash: Syntax Survival — Web Multiplayer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,600;0,800;1,400&family=Orbitron:wght@600;800;900&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./src/style.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "peerjs": "https://esm.sh/peerjs@1.5.4"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <canvas id="game-canvas"></canvas>
+
+    <!-- LOBBY OVERLAY -->
+    <div id="lobby-screen" class="overlay active">
+      <div class="cyber-panel lobby-panel">
+        <div class="badge-tag">WEB MULTIPLAYER P2P // ZERO SERVER COST</div>
+        <h1 class="game-title">DEV DASH<span>: SYNTAX SURVIVAL</span></h1>
+        <p class="subtitle">
+          Sobreviva no mesmo Data Center com seus amigos, dispute XP e faça Deploy de código JavaScript para dominar a Sprint!
+        </p>
+
+        <div class="lobby-grid">
+          <div class="lobby-col">
+            <label class="field-label">SEU NICKNAME (DEV TAG)</label>
+            <input id="player-name-input" type="text" maxlength="14" value="Dev_Master" class="cyber-input" />
+
+            <label class="field-label">ESCOLHA SUA STACK (CLASSE)</label>
+            <div id="class-selector" class="class-grid">
+              <button class="class-card selected" data-class="fullstack">
+                <div class="class-icon" style="color: #00e5ff">⚡</div>
+                <div class="class-info">
+                  <strong>Full-Stack</strong>
+                  <span>Syntax Blaster + Orbitals balanceados</span>
+                </div>
+              </button>
+              <button class="class-card" data-class="frontend">
+                <div class="class-icon" style="color: #ff2d95">🚀</div>
+                <div class="class-info">
+                  <strong>Frontend Ninja</strong>
+                  <span>+25% Move Speed & Rajada Rápida CSS</span>
+                </div>
+              </button>
+              <button class="class-card" data-class="backend">
+                <div class="class-icon" style="color: #33ff88">🛡️</div>
+                <div class="class-info">
+                  <strong>Backend Tank</strong>
+                  <span>+40% HP Máximo & Firewall Aura</span>
+                </div>
+              </button>
+              <button class="class-card" data-class="secops">
+                <div class="class-icon" style="color: #ffb020">🌩️</div>
+                <div class="class-info">
+                  <strong>SecOps Hacker</strong>
+                  <span>Regex Lightning em cadeia & +XP em Código</span>
+                </div>
+              </button>
+            </div>
+          </div>
+
+          <div class="lobby-col room-col">
+            <div id="connection-status" class="status-pill">Pronto para conectar (PeerJS WebRTC)</div>
+
+            <div class="room-actions">
+              <button id="btn-create-room" class="cyber-btn primary">
+                CRIAR SALA (HOST P2P)
+              </button>
+
+              <div class="divider"><span>OU ENTRE NA SALA DE UM AMIGO</span></div>
+
+              <div class="join-row">
+                <input
+                  id="room-code-input"
+                  type="text"
+                  maxlength="12"
+                  placeholder="Código (ex: DASH-1234)"
+                  class="cyber-input"
+                />
+                <button id="btn-join-room" class="cyber-btn secondary">ENTRAR</button>
+              </div>
+            </div>
+
+            <div id="room-lobby-box" class="room-lobby-box hidden">
+              <div class="room-header">
+                <div>
+                  <span class="small-label">SALA ATIVA:</span>
+                  <strong id="active-room-code" class="room-code-display">DASH-0000</strong>
+                </div>
+                <button id="btn-copy-link" class="cyber-btn small">📋 Copiar Link</button>
+              </div>
+
+              <div class="players-list-title">DEVS NO DATA CENTER (<span id="lobby-player-count">1</span>/8):</div>
+              <ul id="lobby-players-list" class="lobby-players-list"></ul>
+
+              <div id="host-controls" class="host-controls">
+                <label class="bot-toggle">
+                  <input type="checkbox" id="chk-fill-bots" checked />
+                  <span>Adicionar Devs Bots competitivos (ótimo p/ testar ou completar sala)</span>
+                </label>
+                <button id="btn-start-match" class="cyber-btn start-btn">
+                  ▶ INICIAR SPRINT DE 5 MINUTOS
+                </button>
+              </div>
+              <div id="client-wait-msg" class="client-wait-msg hidden">
+                Aguardando o Host iniciar a Sprint...
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="how-to-play-bar">
+          <div><strong>WASD / Setas:</strong> Mover pela Arena</div>
+          <div><strong>Terminais Verdes (Mapa):</strong> Speed Typing JS (+XP / +Commits)</div>
+          <div><strong>Sirene Merge Conflict:</strong> Fix the Bug JS PvP (1º ganha Evolução, últimos levam Boss!)</div>
+          <div><strong>🛡️ Escudo de Foco:</strong> Enquanto você coda, seu boneco entra em Piloto Automático <strong>SEM TOMAR DANO</strong>!</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- HUD IN-GAME -->
+    <div id="game-hud" class="hud hidden">
+      <div class="hud-top">
+        <!-- Player Stats -->
+        <div class="hud-box player-hud">
+          <div class="player-top-row">
+            <span id="hud-player-name" class="hud-name">Dev_Master</span>
+            <span id="hud-level" class="hud-lvl">LVL 1</span>
+          </div>
+          <div class="bar-container hp-bar">
+            <div id="hud-hp-fill" class="bar-fill hp-fill" style="width: 100%"></div>
+            <span id="hud-hp-text" class="bar-label">100 / 100 HP</span>
+          </div>
+          <div class="bar-container xp-bar">
+            <div id="hud-xp-fill" class="bar-fill xp-fill" style="width: 0%"></div>
+            <span id="hud-xp-text" class="bar-label">0 / 110 XP</span>
+          </div>
+          <div id="hud-shield-badge" class="shield-badge hidden">
+            🛡️ ESCUDO DE FOCO ATIVO (PILOTO AUTOMÁTICO • ZERO DANO)
+          </div>
+        </div>
+
+        <!-- Sprint Timer & Merge Conflict Alert -->
+        <div class="hud-box center-hud">
+          <div class="sprint-label">SPRINT TIMER</div>
+          <div id="hud-timer" class="sprint-timer">05:00</div>
+          <div class="merge-countdown-wrap">
+            <span>Próximo Merge Conflict PvP:</span>
+            <strong id="hud-merge-timer">01:15</strong>
+          </div>
+        </div>
+
+        <!-- Live Commits Scoreboard -->
+        <div class="hud-box scoreboard-hud">
+          <div class="board-header">
+            <span>🏆 RANKING DE COMMITS (SCORE)</span>
+            <span id="hud-room-tag" class="room-mini-tag">SOLO</span>
+          </div>
+          <ul id="hud-leaderboard" class="leaderboard-list"></ul>
+        </div>
+      </div>
+
+      <!-- Event Banner -->
+      <div id="event-banner" class="event-banner hidden"></div>
+
+      <!-- Quick Level-Up Cards (Non-blocking bottom bar) -->
+      <div id="upgrade-drawer" class="upgrade-drawer hidden">
+        <div class="upgrade-title">⚡ LEVEL UP! ESCOLHA UM UPGRADE (Teclas [1] [2] [3] ou Clique):</div>
+        <div id="upgrade-cards" class="upgrade-cards"></div>
+      </div>
+    </div>
+
+    <!-- MODAL 1: TERMINAL SPEED TYPING (MAP TERMINALS) -->
+    <div id="terminal-modal" class="code-modal-backdrop hidden">
+      <div class="cyber-panel code-modal terminal-theme">
+        <div class="modal-header">
+          <div>
+            <span class="modal-badge green">💻 TERMINAL DE DEPLOY RÁPIDO</span>
+            <h3>SPEED TYPING JAVASCRIPT</h3>
+          </div>
+          <div class="shield-pill">🛡️ PILOTO AUTOMÁTICO + INVULNERÁVEL ATIVO</div>
+        </div>
+
+        <p class="modal-desc" id="terminal-prompt-desc">
+          Digite o snippet JavaScript abaixo exatamente como exibido para injetar o patch e ganhar <strong>+180 Commits & XP Bônus</strong>!
+        </p>
+
+        <div class="code-editor-box">
+          <div class="editor-statusbar">
+            <span>patch_hotfix.js</span>
+            <span id="terminal-progress-pct">0%</span>
+          </div>
+          <div id="terminal-target-code" class="target-code-display"></div>
+          <input
+            id="terminal-hidden-input"
+            type="text"
+            class="code-live-input"
+            placeholder="Digite o código aqui..."
+            autocomplete="off"
+            autocapitalize="off"
+            spellcheck="false"
+          />
+        </div>
+
+        <div class="modal-footer">
+          <span class="hint-text">Dica: Digite com precisão! Erros piscam em vermelho.</span>
+          <button id="btn-close-terminal" class="cyber-btn small danger">[ESC] Sair do Terminal</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL 2: GLOBAL MERGE CONFLICT (PVP FIX THE BUG) -->
+    <div id="merge-modal" class="code-modal-backdrop hidden">
+      <div class="cyber-panel code-modal merge-theme">
+        <div class="modal-header">
+          <div>
+            <span class="modal-badge red">⚠️ SIRENE GLOBAL: MERGE CONFLICT PVP</span>
+            <h3 id="merge-title">FIX THE BUG EM JAVASCRIPT!</h3>
+          </div>
+          <div class="merge-timer-pill">⏱️ <span id="merge-countdown">25</span>s</div>
+        </div>
+
+        <div class="shield-pill full-width">
+          🛡️ TODOS OS DEVS ESTÃO EM PILOTO AUTOMÁTICO SEM DANO! O 1º A CORRIGIR GANHA EVOLUÇÃO + 450 COMMITS. OS ÚLTIMOS LEVAM BOSS!
+        </div>
+
+        <div class="merge-split">
+          <div class="merge-problem-col">
+            <p id="merge-description" class="merge-desc"></p>
+            <pre id="merge-buggy-code" class="buggy-code-block"></pre>
+
+            <div class="fix-section">
+              <label class="field-label">ESCOLHA OU DIGITE O FIX CORRETO PARA A LINHA COM BUG:</label>
+              <div id="merge-options" class="merge-options-grid"></div>
+
+              <div class="custom-fix-row">
+                <span>Ou digite a expressão corrigida:</span>
+                <div class="join-row">
+                  <input
+                    id="merge-custom-input"
+                    type="text"
+                    class="cyber-input mono"
+                    placeholder="Ex: return a + b;"
+                    autocomplete="off"
+                    spellcheck="false"
+                  />
+                  <button id="btn-submit-merge" class="cyber-btn primary">GIT PUSH</button>
+                </div>
+              </div>
+              <div id="merge-feedback" class="merge-feedback"></div>
+            </div>
+          </div>
+
+          <div class="merge-race-col">
+            <div class="race-title">🏁 CORRIDA DE DEPLOY AO VIVO</div>
+            <ul id="merge-race-list" class="merge-race-list"></ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL 3: PODIUM END OF SPRINT -->
+    <div id="podium-screen" class="overlay hidden">
+      <div class="cyber-panel podium-panel">
+        <div class="badge-tag">FIM DA SPRINT DE 5 MINUTOS // DEPLOY CONCLUÍDO</div>
+        <h1 class="game-title">RANKING FINAL DA SPRINT</h1>
+        <p id="podium-winner-banner" class="subtitle"></p>
+
+        <div id="podium-table-wrap" class="podium-table-wrap">
+          <table class="podium-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Dev</th>
+                <th>Level</th>
+                <th>Bugs Mortos</th>
+                <th>Deploys JS</th>
+                <th>Commits (Score)</th>
+              </tr>
+            </thead>
+            <tbody id="podium-tbody"></tbody>
+          </table>
+        </div>
+
+        <div class="podium-actions">
+          <button id="btn-play-again" class="cyber-btn primary">🔄 NOVA SPRINT NA MESMA SALA</button>
+          <button id="btn-back-lobby" class="cyber-btn secondary">VOLTAR AO LOBBY</button>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>

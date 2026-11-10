@@ -1,0 +1,485 @@
+import { ARENA_HALF, SERVER_RACKS } from './engine.js';
+
+export class GameRenderer {
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d');
+    this.camX = 0;
+    this.camY = 0;
+    this.orbitalPhase = 0;
+    this.resize();
+    window.addEventListener('resize', () => this.resize());
+  }
+
+  resize() {
+    this.canvas.width = window.innerWidth;
+    this.canvas.height = window.innerHeight;
+  }
+
+  render(snapshot, myPlayerId, dt) {
+    const ctx = this.ctx;
+    const w = this.canvas.width;
+    const h = this.canvas.height;
+    this.orbitalPhase += dt * 3.4;
+
+    const me = snapshot.players.find((p) => p.id === myPlayerId) || snapshot.players[0];
+    if (me) {
+      this.camX += (me.x - this.camX) * Math.min(1, dt * 10);
+      this.camY += (me.y - this.camY) * Math.min(1, dt * 10);
+    }
+
+    // 1. Fundo Data Center
+    ctx.fillStyle = '#07090e';
+    ctx.fillRect(0, 0, w, h);
+
+    ctx.save();
+    ctx.translate(w / 2 - this.camX, h / 2 - this.camY);
+
+    this.drawDataCenterFloor(ctx, w, h);
+    this.drawArenaBorders(ctx);
+
+    // 2. Terminais de Código JS
+    for (const term of snapshot.terminals) {
+      if (term.active) {
+        this.drawCodeTerminal(ctx, term, me);
+      }
+    }
+
+    // 3. Cristais de XP (Data Packets)
+    for (const gem of snapshot.gems) {
+      ctx.save();
+      ctx.translate(gem.x, gem.y);
+      ctx.fillStyle = gem.color;
+      ctx.shadowColor = gem.color;
+      ctx.shadowBlur = 10;
+      ctx.beginPath();
+      ctx.moveTo(0, -6);
+      ctx.lineTo(6, 0);
+      ctx.lineTo(0, 6);
+      ctx.lineTo(-6, 0);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // 4. Server Racks (portado de ServerRackVisual.gd)
+    const blinkPhase = Math.floor(performance.now() / 450) % 6;
+    for (const rack of SERVER_RACKS) {
+      this.drawServerRack(ctx, rack.x, rack.y, blinkPhase);
+    }
+
+    // 5. Inimigos (Bugs, Hackers e Bosses)
+    for (const enemy of snapshot.enemies) {
+      this.drawEnemy(ctx, enemy);
+    }
+
+    // 6. Jogadores (Devs)
+    for (const player of snapshot.players) {
+      this.drawPlayer(ctx, player, player.id === myPlayerId);
+    }
+
+    // 7. Projéteis
+    for (const proj of snapshot.projectiles) {
+      ctx.save();
+      ctx.translate(proj.x, proj.y);
+      ctx.fillStyle = proj.color;
+      ctx.shadowColor = proj.color;
+      ctx.shadowBlur = 8;
+      ctx.beginPath();
+      ctx.arc(0, 0, proj.radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // 8. Textos Flutuantes
+    for (const ft of snapshot.floatingTexts) {
+      ctx.save();
+      ctx.font = '800 13px "JetBrains Mono", monospace';
+      ctx.fillStyle = ft.color;
+      ctx.textAlign = 'center';
+      ctx.shadowColor = '#000';
+      ctx.shadowBlur = 4;
+      ctx.fillText(ft.text, ft.x, ft.y);
+      ctx.restore();
+    }
+
+    ctx.restore();
+
+    // 9. Minimapa / Radar da Arena Compartilhada
+    this.drawMinimap(ctx, snapshot, myPlayerId);
+  }
+
+  drawDataCenterFloor(ctx, viewW, viewH) {
+    const tileSize = 110;
+    const startX = Math.max(-ARENA_HALF, Math.floor((this.camX - viewW / 2) / tileSize) * tileSize);
+    const endX = Math.min(ARENA_HALF, Math.ceil((this.camX + viewW / 2) / tileSize) * tileSize);
+    const startY = Math.max(-ARENA_HALF, Math.floor((this.camY - viewH / 2) / tileSize) * tileSize);
+    const endY = Math.min(ARENA_HALF, Math.ceil((this.camY + viewH / 2) / tileSize) * tileSize);
+
+    for (let x = startX; x < endX; x += tileSize) {
+      for (let y = startY; y < endY; y += tileSize) {
+        const isAlt = (Math.floor(x / tileSize) + Math.floor(y / tileSize)) % 2 === 0;
+        ctx.fillStyle = isAlt ? '#0c0f16' : '#0f131c';
+        ctx.fillRect(x, y, tileSize - 2, tileSize - 2);
+
+        // Pontos de parafuso do piso elevado
+        ctx.fillStyle = '#1e2430';
+        ctx.fillRect(x + 6, y + 6, 3, 3);
+        ctx.fillRect(x + tileSize - 11, y + tileSize - 11, 3, 3);
+      }
+    }
+  }
+
+  drawArenaBorders(ctx) {
+    ctx.save();
+    ctx.strokeStyle = '#00e5ff';
+    ctx.lineWidth = 4;
+    ctx.shadowColor = '#00e5ff';
+    ctx.shadowBlur = 16;
+    ctx.strokeRect(-ARENA_HALF, -ARENA_HALF, ARENA_HALF * 2, ARENA_HALF * 2);
+    ctx.restore();
+  }
+
+  drawServerRack(ctx, x, y, blinkPhase) {
+    ctx.save();
+    ctx.translate(x, y);
+
+    // Sombra suave e glow azulado no chão
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+    ctx.beginPath();
+    ctx.ellipse(0, 38, 28, 14, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = 'rgba(0, 128, 204, 0.08)';
+    ctx.beginPath();
+    ctx.arc(0, 36, 34, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Gabinete metálico
+    ctx.fillStyle = '#191c24';
+    ctx.fillRect(-22, -46, 44, 92);
+    ctx.fillStyle = '#262b36';
+    ctx.fillRect(-20, -44, 40, 88);
+    ctx.fillStyle = 'rgba(15, 18, 26, 0.96)';
+    ctx.fillRect(-19, -43, 38, 86);
+
+    // Baias de servidor e LEDs piscantes
+    for (let i = 0; i < 6; i++) {
+      const yOff = -36 + i * 13;
+      ctx.fillStyle = '#1f242d';
+      ctx.fillRect(-15, yOff, 30, 9);
+
+      const pattern = (i + blinkPhase) % 3;
+      ctx.fillStyle = pattern === 0 ? '#00e64d' : pattern === 1 ? '#e6261a' : '#3399ff';
+      ctx.beginPath();
+      ctx.arc(-10, yOff + 4.5, 2, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#3399ff';
+      ctx.beginPath();
+      ctx.arc(-4, yOff + 4.5, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.restore();
+  }
+
+  drawCodeTerminal(ctx, term, me) {
+    const pulse = 0.8 + Math.sin(performance.now() * 0.006) * 0.2;
+    ctx.save();
+    ctx.translate(term.x, term.y);
+
+    // Círculo de ativação no chão
+    ctx.strokeStyle = term.lockedByPlayerId ? '#ffb020' : '#33ff88';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, 0, 38 * pulse, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.fillStyle = term.lockedByPlayerId ? 'rgba(255, 176, 32, 0.12)' : 'rgba(51, 255, 136, 0.12)';
+    ctx.beginPath();
+    ctx.arc(0, 0, 34, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Totem do Terminal JS
+    ctx.fillStyle = '#0f172a';
+    ctx.strokeStyle = '#33ff88';
+    ctx.lineWidth = 2;
+    ctx.fillRect(-18, -22, 36, 28);
+    ctx.strokeRect(-18, -22, 36, 28);
+
+    ctx.fillStyle = '#33ff88';
+    ctx.font = '800 11px "JetBrains Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('JS>_', 0, -4);
+
+    if (me && Math.hypot(me.x - term.x, me.y - term.y) < 110 && !me.isCoding) {
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '800 10px "JetBrains Mono", monospace';
+      ctx.fillText('[ENCOSTE P/ CODAR]', 0, 26);
+    }
+
+    ctx.restore();
+  }
+
+  drawEnemy(ctx, e) {
+    ctx.save();
+    const bounce = Math.abs(Math.sin(e.walkCycle * 2)) * 2.5;
+    ctx.translate(e.x, e.y - bounce);
+    ctx.scale(e.scale, e.scale);
+
+    // Sombra
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    ctx.beginPath();
+    ctx.ellipse(0, 16, 13, 6, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    if (e.kind === 'hacker') {
+      // Hacker Visual (Capuz + Faixa Vermelha + Olhos Brilhantes + Laptop Verde)
+      ctx.fillStyle = e.hitFlash > 0 ? '#ffffff' : '#12131a';
+      ctx.beginPath();
+      ctx.arc(0, -10, 11, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = e.hitFlash > 0 ? '#ffffff' : '#242630';
+      ctx.fillRect(-12, -2, 24, 16);
+
+      // Faixa vermelha (Obi)
+      ctx.fillStyle = '#d91a26';
+      ctx.fillRect(-12, 7, 24, 4);
+
+      // Olhos vermelhos brilhantes
+      ctx.fillStyle = '#ff3340';
+      ctx.beginPath();
+      ctx.arc(-4, -10, 2, 0, Math.PI * 2);
+      ctx.arc(4, -10, 2, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Laptop hacker
+      ctx.fillStyle = '#00e680';
+      ctx.fillRect(6, -1, 10, 7);
+    } else if (e.kind === 'boss') {
+      // Boss de Merge Conflict / Raid
+      const bossColor =
+        e.bossType === 'blue_screen'
+          ? '#0066ff'
+          : e.bossType === 'memory_leak'
+          ? '#33ff88'
+          : e.bossType === 'stack_overflow'
+          ? '#ffb020'
+          : '#ff2d55';
+
+      ctx.fillStyle = e.hitFlash > 0 ? '#ffffff' : '#161922';
+      ctx.strokeStyle = bossColor;
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.arc(0, 0, 17, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Olhos compostos
+      ctx.fillStyle = bossColor;
+      ctx.beginPath();
+      ctx.arc(-6, -3, 3.5, 0, Math.PI * 2);
+      ctx.arc(6, -3, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.font = '800 8px "JetBrains Mono", monospace';
+      ctx.fillStyle = '#fff';
+      ctx.textAlign = 'center';
+      ctx.fillText((e.bossType || 'BOSS').replace('_', ' ').toUpperCase(), 0, -22);
+    } else {
+      // Inseto / Syntax Bug (Tier 1 a 4)
+      const bugColors = ['#ff3355', '#ff9920', '#b833ff', '#00f0ff'];
+      const col = e.hitFlash > 0 ? '#ffffff' : bugColors[(e.tier - 1) % bugColors.length];
+
+      // Pernas articuladas
+      ctx.strokeStyle = col;
+      ctx.lineWidth = 2;
+      for (const side of [-1, 1]) {
+        for (let leg = -1; leg <= 1; leg++) {
+          const swing = Math.sin(e.walkCycle + leg) * 3;
+          ctx.beginPath();
+          ctx.moveTo(side * 8, leg * 4);
+          ctx.lineTo(side * 15, leg * 6 + swing);
+          ctx.stroke();
+        }
+      }
+
+      // Carapaça
+      ctx.fillStyle = '#141824';
+      ctx.strokeStyle = col;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 11, 13, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Olhos brilhantes
+      ctx.fillStyle = col;
+      ctx.beginPath();
+      ctx.arc(-4, -6, 2.3, 0, Math.PI * 2);
+      ctx.arc(4, -6, 2.3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Barra de HP do inimigo se estiver ferido ou for Boss
+    if (e.hp < e.maxHp || e.kind === 'boss') {
+      const bw = 24;
+      const pct = Math.max(0, e.hp / e.maxHp);
+      ctx.fillStyle = 'rgba(0,0,0,0.7)';
+      ctx.fillRect(-bw / 2, -19, bw, 3.5);
+      ctx.fillStyle = e.kind === 'boss' ? '#ff2d95' : '#ff3344';
+      ctx.fillRect(-bw / 2, -19, bw * pct, 3.5);
+    }
+
+    ctx.restore();
+  }
+
+  drawPlayer(ctx, p, isMe) {
+    ctx.save();
+    ctx.translate(p.x, p.y);
+
+    if (p.respawnTimer > 0) {
+      ctx.globalAlpha = 0.4;
+      ctx.fillStyle = '#ff3344';
+      ctx.font = '800 12px "JetBrains Mono", monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(`REDEPLOY EM ${p.respawnTimer.toFixed(1)}s`, 0, -28);
+    }
+
+    // 1. Firewall Aura
+    if (p.firewallLevel > 0 && p.respawnTimer <= 0) {
+      const auraR = 85 + p.firewallLevel * 18;
+      ctx.strokeStyle = 'rgba(255, 110, 40, 0.32)';
+      ctx.fillStyle = 'rgba(255, 80, 20, 0.06)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, auraR, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    // 2. Git Orbitals
+    if (p.orbitalCount > 0 && p.respawnTimer <= 0) {
+      const orbR = 74;
+      for (let i = 0; i < p.orbitalCount; i++) {
+        const ang = this.orbitalPhase + (i / p.orbitalCount) * Math.PI * 2;
+        const ox = Math.cos(ang) * orbR;
+        const oy = Math.sin(ang) * orbR;
+        ctx.fillStyle = p.color;
+        ctx.shadowColor = p.color;
+        ctx.shadowBlur = 10;
+        ctx.beginPath();
+        ctx.arc(ox, oy, 6.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+      }
+    }
+
+    // 3. ESCUDO DE FOCO (Piloto Automático + Invulnerável enquanto coda!)
+    if (p.isCoding && p.respawnTimer <= 0) {
+      const pulse = 32 + Math.sin(performance.now() * 0.01) * 3;
+      ctx.save();
+      ctx.strokeStyle = '#33ff88';
+      ctx.fillStyle = 'rgba(51, 255, 136, 0.16)';
+      ctx.lineWidth = 2.5;
+      ctx.shadowColor = '#33ff88';
+      ctx.shadowBlur = 16;
+      ctx.beginPath();
+      ctx.arc(0, 0, pulse, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+
+      ctx.fillStyle = '#33ff88';
+      ctx.font = '800 10px "JetBrains Mono", monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('🛡️ CODANDO JS (IMUNE)', 0, -46);
+    }
+
+    // Sombra
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.beginPath();
+    ctx.ellipse(0, 18, 14, 6, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Corpo Cyberpunk do Dev
+    const bounce = Math.abs(Math.sin(p.walkCycle)) * 2.5;
+    ctx.translate(0, -bounce);
+
+    ctx.fillStyle = '#1e293b';
+    ctx.strokeStyle = p.color;
+    ctx.lineWidth = isMe ? 3 : 2;
+    ctx.beginPath();
+    ctx.roundRect(-13, -12, 26, 26, 7);
+    ctx.fill();
+    ctx.stroke();
+
+    // Visor Neon
+    ctx.fillStyle = p.color;
+    ctx.fillRect(-8, -7, 16, 6);
+
+    // Nome, Level e Barra de HP acima do boneco
+    ctx.font = '800 11px "JetBrains Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = isMe ? '#ffffff' : p.color;
+    ctx.fillText(`${p.name} [L${p.level}]`, 0, -29);
+
+    const hpW = 34;
+    const hpPct = Math.max(0, p.hp / p.maxHp);
+    ctx.fillStyle = 'rgba(0,0,0,0.75)';
+    ctx.fillRect(-hpW / 2, -23, hpW, 4.5);
+    ctx.fillStyle = p.isCoding ? '#33ff88' : isMe ? '#00e5ff' : p.color;
+    ctx.fillRect(-hpW / 2, -23, hpW * hpPct, 4.5);
+
+    ctx.restore();
+  }
+
+  drawMinimap(ctx, snapshot, myPlayerId) {
+    const size = 148;
+    const pad = 16;
+    const mx = this.canvas.width - size - pad;
+    const my = this.canvas.height - size - pad;
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(8, 12, 20, 0.86)';
+    ctx.strokeStyle = 'rgba(0, 229, 255, 0.35)';
+    ctx.lineWidth = 1.5;
+    ctx.fillRect(mx, my, size, size);
+    ctx.strokeRect(mx, my, size, size);
+
+    const scale = size / (ARENA_HALF * 2);
+    const cx = mx + size / 2;
+    const cy = my + size / 2;
+
+    // Terminais JS (pontos verdes)
+    for (const t of snapshot.terminals) {
+      if (!t.active) continue;
+      ctx.fillStyle = '#33ff88';
+      ctx.fillRect(cx + t.x * scale - 2, cy + t.y * scale - 2, 4, 4);
+    }
+
+    // Bosses (pontos vermelhos maiores)
+    for (const e of snapshot.enemies) {
+      if (e.kind !== 'boss') continue;
+      ctx.fillStyle = '#ff3344';
+      ctx.beginPath();
+      ctx.arc(cx + e.x * scale, cy + e.y * scale, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Jogadores
+    for (const p of snapshot.players) {
+      ctx.fillStyle = p.id === myPlayerId ? '#ffffff' : p.color;
+      ctx.beginPath();
+      ctx.arc(cx + p.x * scale, cy + p.y * scale, p.id === myPlayerId ? 4 : 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '800 9px "JetBrains Mono", monospace';
+    ctx.fillText('RADAR DATA CENTER', mx + 8, my + 13);
+    ctx.restore();
+  }
+}
