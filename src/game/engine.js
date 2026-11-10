@@ -1,4 +1,4 @@
-import { JS_MERGE_CHALLENGES, JS_SPEED_SNIPPETS } from '../coding/js_challenges.js';
+import { JS_MERGE_CHALLENGES, JS_SPEED_SNIPPETS, normalizeCode } from '../coding/js_challenges.js';
 import {
   getBossStats,
   getBugStats,
@@ -8,6 +8,9 @@ import {
 
 export const ARENA_HALF = 1100; // Arena 2200x2200 (-1100 a +1100)
 export const SPRINT_DURATION = 300; // 5 minutos (300s)
+export const TERMINAL_DURATION = 18;
+export const TERMINAL_COOLDOWN = 6;
+export const TERMINAL_RANGE = 60;
 export const MERGE_INTERVAL = 75; // A cada 75s toca a sirene de Merge Conflict
 
 // Posições determinísticas de Racks no Data Center
@@ -70,6 +73,10 @@ export class GameEngine {
 
   startNewMatch(lobbyPlayers, fillBots) {
     this.snapshot = this.createEmptySnapshot();
+    this.spawnTimer = 0;
+    this.hackerTimer = 18;
+    this.terminalSpawnTimer = 4;
+    this.mergeChallengeIdx = 0;
     this.inputs.clear();
     this.fireTimers.clear();
     this.lightningTimers.clear();
@@ -143,6 +150,9 @@ export class GameEngine {
       deploysCompleted: 0,
       isCoding: false,
       codingType: 'none',
+      terminalId: null,
+      terminalTimeRemaining: 0,
+      terminalCooldownRemaining: 0,
       mergeProgress: 0,
       mergeFinishedRank: 0,
       respawnTimer: 0,
@@ -163,58 +173,55 @@ export class GameEngine {
     this.inputs.set(playerId, input);
   }
 
-  setPlayerCoding(playerId, isCoding, terminalId = null) {
-    const p = this.snapshot.players.find((pl) => pl.id === playerId);
-    if (!p || p.respawnTimer > 0) return;
-
-    if (this.snapshot.activeMerge) {
-      p.isCoding = true;
-      p.codingType = 'merge';
-      return;
+  releaseTerminal(p) {
+    for (const term of this.snapshot.terminals) {
+      if (term.lockedByPlayerId === p.id) term.lockedByPlayerId = null;
     }
-
-    p.isCoding = isCoding;
-    p.codingType = isCoding ? 'terminal' : 'none';
-
-    if (isCoding && terminalId !== null) {
-      const term = this.snapshot.terminals.find((t) => t.id === terminalId && t.active);
-      if (term && (!term.lockedByPlayerId || term.lockedByPlayerId === playerId)) {
-        term.lockedByPlayerId = playerId;
-      }
-    } else if (!isCoding) {
-      for (const t of this.snapshot.terminals) {
-        if (t.lockedByPlayerId === playerId) {
-          t.lockedByPlayerId = null;
-        }
-      }
-    }
-  }
-
-  completeTerminal(playerId, terminalId) {
-    const p = this.snapshot.players.find((pl) => pl.id === playerId);
-    if (!p) return;
-
-    const term = this.snapshot.terminals.find((t) => t.id === terminalId && t.active);
-    const snippet = JS_SPEED_SNIPPETS.find((s) => s.id === term?.snippetId) ?? JS_SPEED_SNIPPETS[0];
-
-    if (term) {
-      term.active = false;
-      this.snapshot.terminals = this.snapshot.terminals.filter((t) => t.id !== terminalId);
-    }
-
+    this.botTerminalTimers.delete(p.id);
+    p.terminalId = null;
+    p.terminalTimeRemaining = 0;
     p.isCoding = false;
     p.codingType = 'none';
-    p.deploysCompleted += 1;
+    p.terminalCooldownRemaining = TERMINAL_COOLDOWN;
+  }
 
+  setPlayerCoding(playerId, isCoding, terminalId = null) {
+    const p = this.snapshot.players.find((pl) => pl.id === playerId);
+    if (!p || p.respawnTimer > 0 || this.snapshot.matchEnded || this.snapshot.activeMerge) return false;
+    if (!isCoding) {
+      if (p.codingType === 'terminal') this.releaseTerminal(p);
+      return true;
+    }
+    if (p.isCoding || p.terminalCooldownRemaining > 0) return false;
+    const term = this.snapshot.terminals.find((t) => t.id === terminalId && t.active);
+    if (!term || term.lockedByPlayerId || Math.hypot(term.x - p.x, term.y - p.y) > TERMINAL_RANGE) return false;
+    term.lockedByPlayerId = p.id;
+    p.isCoding = true;
+    p.codingType = 'terminal';
+    p.terminalId = term.id;
+    p.terminalTimeRemaining = TERMINAL_DURATION;
+    if (p.isBot) this.botTerminalTimers.set(p.id, 4.8);
+    return true;
+  }
+
+  completeTerminal(playerId, terminalId, code) {
+    const p = this.snapshot.players.find((pl) => pl.id === playerId);
+    if (!p || this.snapshot.matchEnded || this.snapshot.activeMerge || p.respawnTimer > 0 ||
+        p.codingType !== 'terminal' || p.terminalId !== terminalId || p.terminalTimeRemaining <= 0) return false;
+    const term = this.snapshot.terminals.find((t) => t.id === terminalId && t.active && t.lockedByPlayerId === playerId);
+    const snippet = JS_SPEED_SNIPPETS.find((s) => s.id === term?.snippetId);
+    if (!snippet || (!p.isBot && code !== snippet.code)) return false;
+    this.releaseTerminal(p);
+    this.snapshot.terminals = this.snapshot.terminals.filter((t) => t.id !== terminalId);
+    p.deploysCompleted += 1;
     const secBonus = p.devClass === 'secops' ? 1.25 : 1.0;
     const commitsGain = Math.round(snippet.commitsReward * secBonus);
     const xpGain = Math.round(snippet.xpReward * secBonus);
-
     p.score += commitsGain;
     p.hp = Math.min(p.maxHp, p.hp + 25);
     this.giveXp(p, xpGain);
-
     this.addFloatingText(p.x, p.y - 35, `💻 DEPLOY OK! +${commitsGain} COMMITS`, '#33ff88');
+    return true;
   }
 
   updateMergeProgress(playerId, progress) {
@@ -223,10 +230,12 @@ export class GameEngine {
     p.mergeProgress = Math.max(p.mergeProgress, Math.min(99, progress));
   }
 
-  completeMergeChallenge(playerId) {
+  completeMergeChallenge(playerId, answer) {
     const merge = this.snapshot.activeMerge;
     const p = this.snapshot.players.find((pl) => pl.id === playerId);
-    if (!merge || !p || merge.completedOrder.includes(playerId)) return;
+    if (!merge || !p || this.snapshot.matchEnded || merge.timeRemaining <= 0 || merge.completedOrder.includes(playerId)) return;
+    const challenge = JS_MERGE_CHALLENGES.find((c) => c.id === merge.challengeId);
+    if (!p.isBot && ![challenge.correctAnswer, ...challenge.acceptedAliases].some((a) => normalizeCode(a) === normalizeCode(answer))) return;
 
     merge.completedOrder.push(playerId);
     const rank = merge.completedOrder.length;
@@ -236,21 +245,12 @@ export class GameEngine {
     p.isCoding = false;
     p.codingType = 'none';
 
+    const commits = rank === 1 ? 300 : 240;
+    p.score += commits;
+    this.giveXp(p, 130);
+    this.addFloatingText(p.x, p.y - 40, `✅ MERGE #${rank}! +${commits} COMMITS`, '#33ff88');
     if (rank === 1) {
-      // 1º Lugar: Grande vencedor do Merge Conflict!
-      p.score += 450;
-      this.giveXp(p, 240);
-      p.blasterLevel += 1;
-      p.orbitalCount += 1;
-      p.damageMult += 0.25;
-      p.hp = p.maxHp;
-      this.addFloatingText(p.x, p.y - 45, `🏆 1º PUSH! +450 COMMITS & EVOLUÇÃO!`, '#00e5ff');
-      this.showBanner(`🏆 ${p.name} FEZ O 1º GIT PUSH NO MERGE CONFLICT! (+450 COMMITS)`, 4.0);
-    } else {
-      const commits = Math.max(120, 320 - (rank - 1) * 70);
-      p.score += commits;
-      this.giveXp(p, 110);
-      this.addFloatingText(p.x, p.y - 40, `✅ MERGE #${rank}! +${commits} COMMITS`, '#33ff88');
+      this.showBanner(`🏆 ${p.name} FEZ O 1º PUSH! +300 COMMITS. TODOS OS ACERTOS VALEM +240!`, 4);
     }
 
     // Se todos os jogadores já terminaram, encerra o evento imediatamente
@@ -306,6 +306,11 @@ export class GameEngine {
     if (this.snapshot.sprintTimeRemaining <= 0) {
       this.snapshot.matchEnded = true;
       this.snapshot.activeMerge = null;
+      for (const p of this.snapshot.players) {
+        if (p.codingType === 'terminal') this.releaseTerminal(p);
+        p.isCoding = false;
+        p.codingType = 'none';
+      }
       return;
     }
 
@@ -320,7 +325,7 @@ export class GameEngine {
     if (this.snapshot.activeMerge) {
       this.snapshot.activeMerge.timeRemaining -= dt;
       this.tickBotsInMerge(dt);
-      if (this.snapshot.activeMerge.timeRemaining <= 0) {
+      if (this.snapshot.activeMerge && this.snapshot.activeMerge.timeRemaining <= 0) {
         this.finishMergeConflictEvent();
       }
     } else {
@@ -374,6 +379,7 @@ export class GameEngine {
     this.snapshot.nextMergeTimer = MERGE_INTERVAL;
 
     for (const p of this.snapshot.players) {
+      if (p.codingType === 'terminal') this.releaseTerminal(p);
       p.isCoding = true;
       p.codingType = 'merge';
       p.mergeProgress = 0;
@@ -387,23 +393,8 @@ export class GameEngine {
     const merge = this.snapshot.activeMerge;
     if (!merge) return;
 
-    // Quem não terminou (ou ficou por último com mais de 1 jogador) recebe um Boss/Elite na cabeça!
-    const bossTypes = ['kernel_panic', 'stack_overflow', 'memory_leak', 'blue_screen'];
-    const lastCompletedId = merge.completedOrder[merge.completedOrder.length - 1];
-
+    // O evento recompensa acertos sem penalizar quem está aprendendo.
     for (const p of this.snapshot.players) {
-      const didNotFinish = !merge.completedOrder.includes(p.id);
-      const isLastPlace =
-        this.snapshot.players.length > 1 &&
-        p.id === lastCompletedId &&
-        merge.completedOrder.length === this.snapshot.players.length;
-
-      if (didNotFinish || isLastPlace) {
-        const bType = bossTypes[Math.floor(Math.random() * bossTypes.length)];
-        this.spawnBossNearPlayer(p, bType);
-        this.addFloatingText(p.x, p.y - 40, `💀 MERGE REJECTED! BOSS ${bType.toUpperCase()}!`, '#ff3344');
-      }
-
       p.isCoding = false;
       p.codingType = 'none';
     }
@@ -428,6 +419,18 @@ export class GameEngine {
 
   tickPlayers(dt) {
     for (const p of this.snapshot.players) {
+      p.terminalCooldownRemaining = Math.max(0, p.terminalCooldownRemaining - dt);
+      if (p.codingType === 'terminal') {
+        p.terminalTimeRemaining = Math.max(0, p.terminalTimeRemaining - dt);
+        if (p.terminalTimeRemaining <= 0) {
+          this.releaseTerminal(p);
+          this.addFloatingText(p.x, p.y - 35, 'TEMPO ESGOTADO! VOLTE À ARENA', '#ffb020');
+        } else if (p.isBot) {
+          const remaining = (this.botTerminalTimers.get(p.id) || 0) - dt;
+          this.botTerminalTimers.set(p.id, remaining);
+          if (remaining <= 0) this.completeTerminal(p.id, p.terminalId);
+        }
+      }
       if (p.respawnTimer > 0) {
         p.respawnTimer -= dt;
         if (p.respawnTimer <= 0) {
@@ -531,25 +534,6 @@ export class GameEngine {
   }
 
   computeBotVector(p, dt) {
-    // Bot simula hackear terminal se estiver perto de um
-    const activeTimer = this.botTerminalTimers.get(p.id) || 0;
-    if (activeTimer > 0) {
-      const nextT = activeTimer - dt;
-      if (nextT <= 0) {
-        this.botTerminalTimers.delete(p.id);
-        const lockedTerm = this.snapshot.terminals.find((t) => t.lockedByPlayerId === p.id);
-        if (lockedTerm) {
-          this.completeTerminal(p.id, lockedTerm.id);
-        } else {
-          p.isCoding = false;
-          p.codingType = 'none';
-        }
-      } else {
-        this.botTerminalTimers.set(p.id, nextT);
-      }
-      return this.computeAutoPilotVector(p);
-    }
-
     const baseVec = this.computeAutoPilotVector(p);
 
     // Procura terminal livre ou gema de XP próxima
@@ -564,10 +548,7 @@ export class GameEngine {
         targetX = (term.x - p.x) / Math.max(1, d);
         targetY = (term.y - p.y) / Math.max(1, d);
         foundTarget = true;
-        if (d < 46) {
-          this.setPlayerCoding(p.id, true, term.id);
-          this.botTerminalTimers.set(p.id, 4.8);
-        }
+        if (d < 46) this.setPlayerCoding(p.id, true, term.id);
         break;
       }
     }
@@ -832,6 +813,7 @@ export class GameEngine {
   }
 
   handlePlayerDown(p) {
+    if (p.codingType === 'terminal') this.releaseTerminal(p);
     p.hp = 0;
     p.respawnTimer = 4.5;
     p.isCoding = false;

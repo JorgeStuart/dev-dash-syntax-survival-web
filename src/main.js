@@ -4,7 +4,7 @@ import {
   JS_SPEED_SNIPPETS,
   normalizeCode,
 } from './coding/js_challenges.js';
-import { GameEngine, UPGRADE_OPTIONS } from './game/engine.js';
+import { GameEngine, UPGRADE_OPTIONS, TERMINAL_COOLDOWN, TERMINAL_RANGE } from './game/engine.js';
 import { drawDeveloperCharacter, GameRenderer } from './game/renderer.js';
 import { getPowerupThreshold } from './game/types.js';
 import { DEV_CLASSES, P2PManager, PLAYER_COLORS } from './network/p2p_manager.js';
@@ -88,6 +88,7 @@ const keysDown = new Set();
 let activeTerminalId = null;
 let activeSnippet = null;
 let terminalCooldownUntil = 0;
+let terminalRequestedAt = 0;
 
 let activeMergeChallengeId = null;
 let currentMergeChallenge = null;
@@ -281,13 +282,13 @@ p2p.onClientMessage = (playerId, msg) => {
       engine.setPlayerCoding(playerId, false, null);
       break;
     case 'complete_terminal':
-      engine.completeTerminal(playerId, msg.terminalId);
+      engine.completeTerminal(playerId, msg.terminalId, msg.code);
       break;
     case 'merge_progress':
       engine.updateMergeProgress(playerId, msg.progress);
       break;
     case 'complete_merge':
-      engine.completeMergeChallenge(playerId);
+      engine.completeMergeChallenge(playerId, msg.answer);
       break;
     case 'choose_upgrade':
       engine.applyUpgrade(playerId, msg.upgradeId);
@@ -341,6 +342,11 @@ btnStartMatch.addEventListener('click', () => {
 function enterMatchUI() {
   isPlaying = true;
   activeTerminalId = null;
+  activeSnippet = null;
+  terminalCooldownUntil = 0;
+  keysDown.clear();
+  terminalModal.classList.add('hidden');
+  mergeModal.classList.add('hidden');
   activeMergeChallengeId = null;
   lobbyScreen.classList.add('hidden');
   podiumScreen.classList.add('hidden');
@@ -360,6 +366,12 @@ window.addEventListener('keydown', (e) => {
 
   // Se estiver com modal de código aberto, não captura WASD como movimento
   if (activeTerminalId !== null || !mergeModal.classList.contains('hidden')) {
+    return;
+  }
+
+  if (e.key.toLowerCase() === 'e' && !e.repeat) {
+    const me = currentSnapshot.players.find((p) => p.id === p2p.myId);
+    if (me) checkTerminalProximity(me.x, me.y, currentSnapshot.terminals, true);
     return;
   }
 
@@ -393,7 +405,9 @@ function computeLocalInput() {
 }
 
 // 4. Modal 1: Terminal Speed Typing (JavaScript)
-function checkTerminalProximity(meX, meY, terminals) {
+function checkTerminalProximity(meX, meY, terminals, interact = false) {
+  const me = currentSnapshot.players.find((p) => p.id === p2p.myId);
+  if (!interact || !me || me.respawnTimer > 0 || me.terminalCooldownRemaining > 0 || currentSnapshot.matchEnded) return;
   if (activeTerminalId !== null || currentSnapshot.activeMerge) return;
   if (performance.now() < terminalCooldownUntil) return;
 
@@ -401,7 +415,7 @@ function checkTerminalProximity(meX, meY, terminals) {
     if (!term.active) continue;
     if (term.lockedByPlayerId && term.lockedByPlayerId !== p2p.myId) continue;
     const d = Math.hypot(term.x - meX, term.y - meY);
-    if (d < 42) {
+    if (d <= TERMINAL_RANGE) {
       openTerminalModal(term);
       break;
     }
@@ -409,10 +423,14 @@ function checkTerminalProximity(meX, meY, terminals) {
 }
 
 function openTerminalModal(term) {
+  document.getElementById('terminal-focus-timer').textContent = '🛡️ RESERVANDO TERMINAL...';
+  terminalRequestedAt = performance.now();
+  keysDown.clear();
   activeTerminalId = term.id;
   activeSnippet = JS_SPEED_SNIPPETS.find((s) => s.id === term.snippetId) ?? JS_SPEED_SNIPPETS[0];
 
-  terminalPromptDesc.innerHTML = `${activeSnippet.desc} <strong style="color:#33ff88">(+${activeSnippet.commitsReward} Commits & +${activeSnippet.xpReward} XP)</strong>`;
+  const bonus = currentSnapshot.players.find((p) => p.id === p2p.myId)?.devClass === 'secops' ? 1.25 : 1;
+  terminalPromptDesc.innerHTML = `${activeSnippet.desc} <strong style="color:#33ff88">(+${Math.round(activeSnippet.commitsReward * bonus)} Commits & +${Math.round(activeSnippet.xpReward * bonus)} XP)</strong>`;
   terminalHiddenInput.value = '';
   renderSnippetHighlight('');
   terminalModal.classList.remove('hidden');
@@ -468,17 +486,17 @@ terminalHiddenInput.addEventListener('input', () => {
     const completedId = activeTerminalId;
     activeTerminalId = null;
     activeSnippet = null;
-    terminalCooldownUntil = performance.now() + 1500;
+    terminalCooldownUntil = performance.now() + TERMINAL_COOLDOWN * 1000;
     terminalModal.classList.add('hidden');
     sfx.terminalSuccess();
-    p2p.sendToHost({ type: 'complete_terminal', terminalId: completedId });
+    p2p.sendToHost({ type: 'complete_terminal', terminalId: completedId, code: typed });
   }
 });
 
 function closeTerminalModal() {
   activeTerminalId = null;
   activeSnippet = null;
-  terminalCooldownUntil = performance.now() + 2600;
+  terminalCooldownUntil = performance.now() + TERMINAL_COOLDOWN * 1000;
   terminalModal.classList.add('hidden');
   p2p.sendToHost({ type: 'stop_coding' });
 }
@@ -507,6 +525,7 @@ function syncMergeConflictModal() {
     activeMergeChallengeId = activeMerge.challengeId;
     if (activeTerminalId !== null) {
       activeTerminalId = null;
+      activeSnippet = null;
       terminalModal.classList.add('hidden');
     }
 
@@ -571,7 +590,7 @@ function attemptMergeFix(candidate) {
     sfx.terminalSuccess();
     mergeFeedback.style.color = '#33ff88';
     mergeFeedback.textContent = '✅ TESTS PASSED! Dando git push...';
-    p2p.sendToHost({ type: 'complete_merge' });
+    p2p.sendToHost({ type: 'complete_merge', answer: candidate });
     setTimeout(() => {
       mergeModal.classList.add('hidden');
     }, 350);
@@ -621,6 +640,9 @@ function updateHUD() {
 
   if (me.isCoding) {
     hudShieldBadge.classList.remove('hidden');
+    hudShieldBadge.textContent = me.codingType === 'terminal'
+      ? `🛡️ FOCO: ${Math.ceil(me.terminalTimeRemaining)}s • ESC PARA SAIR`
+      : '🛡️ MERGE CONFLICT: PROTEÇÃO ATIVA';
   } else {
     hudShieldBadge.classList.add('hidden');
   }
@@ -662,8 +684,17 @@ function updateHUD() {
     upgradeDrawer.classList.add('hidden');
   }
 
-  // Checa proximidade de Terminal JS no mapa
-  checkTerminalProximity(me.x, me.y, currentSnapshot.terminals);
+  // O host controla o prazo e confirma a reserva do terminal.
+  if (activeTerminalId !== null && !currentSnapshot.activeMerge) {
+    if (me.codingType === 'terminal' && me.terminalId === activeTerminalId) {
+      const seconds = Math.ceil(me.terminalTimeRemaining);
+      const timer = document.getElementById('terminal-focus-timer');
+      timer.textContent = `🛡️ ${seconds}s DE FOCO • AO TERMINAR, VOCÊ VOLTA À ARENA`;
+      timer.style.color = seconds <= 5 ? '#ffb020' : '';
+    } else if (performance.now() - terminalRequestedAt > 1200) {
+      closeTerminalModal();
+    }
+  }
 
   // Sincroniza Modal de Merge Conflict
   syncMergeConflictModal();

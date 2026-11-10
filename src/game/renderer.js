@@ -1,4 +1,5 @@
-import { ARENA_HALF, SERVER_RACKS } from './engine.js';
+import { JS_SPEED_SNIPPETS } from '../coding/js_challenges.js';
+import { ARENA_HALF, SERVER_RACKS, TERMINAL_DURATION, TERMINAL_RANGE } from './engine.js';
 
 const KEY_GLOW_COLORS = ['#ff2626', '#26ff59', '#2659ff'];
 
@@ -447,7 +448,14 @@ export class GameRenderer {
     if (me && Math.hypot(me.x - term.x, me.y - term.y) < 110 && !me.isCoding) {
       ctx.fillStyle = '#ffffff';
       ctx.font = '800 10px "JetBrains Mono", monospace';
-      ctx.fillText('[ENCOSTE P/ CODAR]', 0, 26);
+      const snippet = JS_SPEED_SNIPPETS.find((s) => s.id === term.snippetId);
+      const bonus = me.devClass === 'secops' ? 1.25 : 1;
+      const label = term.lockedByPlayerId ? 'EM USO' : me.terminalCooldownRemaining > 0
+        ? `RECARGA: ${Math.ceil(me.terminalCooldownRemaining)}s`
+        : Math.hypot(me.x - term.x, me.y - term.y) > TERMINAL_RANGE
+          ? 'APROXIME-SE PARA CODAR' : `[E] CODAR • FOCO ${TERMINAL_DURATION}s`;
+      ctx.fillText(label, 0, 26);
+      if (snippet) ctx.fillText(`+${Math.round(snippet.commitsReward * bonus)} COMMITS / +${Math.round(snippet.xpReward * bonus)} XP`, 0, 42);
     }
 
     ctx.restore();

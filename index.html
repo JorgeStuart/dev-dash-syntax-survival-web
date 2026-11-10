@@ -144,9 +144,9 @@
 
         <div class="how-to-play-bar">
           <div><strong>WASD / Setas:</strong> Mover pela Arena</div>
-          <div><strong>Terminais Verdes (Mapa):</strong> Speed Typing JS (+XP / +Commits)</div>
-          <div><strong>Sirene Merge Conflict:</strong> Fix the Bug JS PvP (1º ganha Evolução, últimos levam Boss!)</div>
-          <div><strong>🛡️ Escudo de Foco:</strong> Enquanto você coda, seu boneco entra em Piloto Automático <strong>SEM TOMAR DANO</strong>!</div>
+          <div><strong>Terminais Verdes:</strong> Veja a recompensa e aperte E para codar (recarga de 6s)</div>
+          <div><strong>Sirene Merge Conflict:</strong> Fix the Bug JS PvP (+300 commits ao 1º, +240 aos demais acertos)</div>
+          <div><strong>🛡️ Escudo de Foco:</strong> Piloto Automático sem dano por até <strong>18s no terminal</strong>. Aviso nos últimos 5s; ESC para sair!</div>
         </div>
       </div>
     </div>
@@ -211,7 +211,7 @@
             <span class="modal-badge green">💻 TERMINAL DE DEPLOY RÁPIDO</span>
             <h3>SPEED TYPING JAVASCRIPT</h3>
           </div>
-          <div class="shield-pill">🛡️ PILOTO AUTOMÁTICO + INVULNERÁVEL ATIVO</div>
+          <div id="terminal-focus-timer" class="shield-pill">🛡️ FOCO POR ATÉ 18s • ESC PARA SAIR</div>
         </div>
 
         <p class="modal-desc" id="terminal-prompt-desc">
@@ -254,7 +254,7 @@
         </div>
 
         <div class="shield-pill full-width">
-          🛡️ TODOS OS DEVS ESTÃO EM PILOTO AUTOMÁTICO SEM DANO! O 1º A CORRIGIR GANHA EVOLUÇÃO + 450 COMMITS. OS ÚLTIMOS LEVAM BOSS!
+          🛡️ TODOS OS DEVS ESTÃO EM PILOTO AUTOMÁTICO SEM DANO! O 1º ACERTO VALE 300 COMMITS; OS DEMAIS VALEM 240. TODOS RECEBEM O MESMO XP, SEM PUNIÇÃO AO ÚLTIMO!
         </div>
 
         <div class="merge-split">
