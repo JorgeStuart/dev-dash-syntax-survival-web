@@ -36,37 +36,60 @@
             <label class="field-label">SEU NICKNAME (DEV TAG)</label>
             <input id="player-name-input" type="text" maxlength="14" value="Dev_Master" class="cyber-input" />
 
-            <label class="field-label">ESCOLHA SUA STACK (CLASSE)</label>
+            <label class="field-label">ESCOLHA SEU DEV (1 DE CADA NA SALA)</label>
             <div id="class-selector" class="class-grid">
-              <button class="class-card selected" data-class="fullstack">
-                <div class="class-icon" style="color: #00e5ff">⚡</div>
+              <button class="class-card selected" data-class="fullstack" data-default-color="#00e5ff">
+                <div class="class-icon">
+                  <canvas class="dev-preview-canvas" width="52" height="56" data-preview-class="fullstack"></canvas>
+                </div>
                 <div class="class-info">
-                  <strong>Full-Stack</strong>
+                  <div class="class-title-row">
+                    <strong>Full-Stack</strong>
+                    <span class="class-status-tag">SEU DEV</span>
+                  </div>
                   <span>Syntax Blaster + Orbitals balanceados</span>
                 </div>
               </button>
-              <button class="class-card" data-class="frontend">
-                <div class="class-icon" style="color: #ff2d95">🚀</div>
+              <button class="class-card" data-class="frontend" data-default-color="#ff2d95">
+                <div class="class-icon">
+                  <canvas class="dev-preview-canvas" width="52" height="56" data-preview-class="frontend"></canvas>
+                </div>
                 <div class="class-info">
-                  <strong>Frontend Ninja</strong>
+                  <div class="class-title-row">
+                    <strong>Frontend Ninja</strong>
+                    <span class="class-status-tag">LIVRE</span>
+                  </div>
                   <span>+25% Move Speed & Rajada Rápida CSS</span>
                 </div>
               </button>
-              <button class="class-card" data-class="backend">
-                <div class="class-icon" style="color: #33ff88">🛡️</div>
+              <button class="class-card" data-class="backend" data-default-color="#33ff88">
+                <div class="class-icon">
+                  <canvas class="dev-preview-canvas" width="52" height="56" data-preview-class="backend"></canvas>
+                </div>
                 <div class="class-info">
-                  <strong>Backend Tank</strong>
+                  <div class="class-title-row">
+                    <strong>Backend Tank</strong>
+                    <span class="class-status-tag">LIVRE</span>
+                  </div>
                   <span>+40% HP Máximo & Firewall Aura</span>
                 </div>
               </button>
-              <button class="class-card" data-class="secops">
-                <div class="class-icon" style="color: #ffb020">🌩️</div>
+              <button class="class-card" data-class="secops" data-default-color="#ffb020">
+                <div class="class-icon">
+                  <canvas class="dev-preview-canvas" width="52" height="56" data-preview-class="secops"></canvas>
+                </div>
                 <div class="class-info">
-                  <strong>SecOps Hacker</strong>
+                  <div class="class-title-row">
+                    <strong>SecOps Hacker</strong>
+                    <span class="class-status-tag">LIVRE</span>
+                  </div>
                   <span>Regex Lightning em cadeia & +XP em Código</span>
                 </div>
               </button>
             </div>
+
+            <label class="field-label" style="margin-top: 12px">COR DO ÓCULOS & AURA NEON (EXCLUSIVA POR PLAYER)</label>
+            <div id="color-selector" class="color-swatches"></div>
           </div>
 
           <div class="lobby-col room-col">

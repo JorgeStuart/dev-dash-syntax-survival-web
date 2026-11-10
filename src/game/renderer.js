@@ -1,5 +1,236 @@
 import { ARENA_HALF, SERVER_RACKS } from './engine.js';
 
+const KEY_GLOW_COLORS = ['#ff2626', '#26ff59', '#2659ff'];
+
+const DEV_SKINS = {
+  fullstack: {
+    hairColor: '#331a0d',
+    hairHighlight: '#472917',
+    shirtColor: '#171a21',
+    pantsColor: '#2e4270',
+    pantsHighlight: '#40598c',
+    skinColor: '#f2c7a6',
+    hasHoodie: false,
+    hasHeadset: false,
+    hasBeard: false,
+  },
+  frontend: {
+    hairColor: '#1e1b4b',
+    hairHighlight: '#ec4899',
+    shirtColor: '#1e162b',
+    pantsColor: '#273659',
+    pantsHighlight: '#3b4f80',
+    skinColor: '#f5d0b5',
+    hasHoodie: false,
+    hasHeadset: true,
+    hasBeard: false,
+  },
+  backend: {
+    hairColor: '#261710',
+    hairHighlight: '#3d251a',
+    shirtColor: '#111c18',
+    pantsColor: '#24385c',
+    pantsHighlight: '#344e7d',
+    skinColor: '#eab68f',
+    hasHoodie: false,
+    hasHeadset: true,
+    hasBeard: true,
+  },
+  secops: {
+    hairColor: '#14141f',
+    hairHighlight: '#29293d',
+    shirtColor: '#18181b',
+    pantsColor: '#1e293b',
+    pantsHighlight: '#334155',
+    skinColor: '#f0c4a2',
+    hasHoodie: true,
+    hasHeadset: false,
+    hasBeard: false,
+  },
+};
+
+/**
+ * Desenha o bonequinho original do DevDash ("Desenvolvedor de Óculos + Crachá + Camiseta </> + Teclado Mecânico RGB")
+ * Portado diretamente de TerminalVisual.gd com variações visuais por stack e cor neon.
+ */
+export function drawDeveloperCharacter(ctx, { devClass = 'fullstack', color = '#00e5ff', walkCycle = 0, facing = 1, isMe = false }) {
+  const skin = DEV_SKINS[devClass] || DEV_SKINS.fullstack;
+  const isWalking = walkCycle > 0.01;
+  const bounce = isWalking ? Math.abs(Math.sin(walkCycle * 2.0)) * 2.2 : 0;
+  const tilt = isWalking ? Math.sin(walkCycle) * 0.05 : 0;
+  const legSwing = isWalking ? Math.sin(walkCycle * 2.0) * 2.2 : 0;
+
+  ctx.save();
+
+  // Sombra de contato suave no chão (não sobe junto com o pulo)
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+  ctx.beginPath();
+  ctx.ellipse(0, 23, 15, 6.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+  ctx.beginPath();
+  ctx.ellipse(0, 23, 10, 4.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Aplica pulinho de caminhada, leve inclinação e direção (esquerda/direita)
+  ctx.translate(0, -bounce);
+  ctx.rotate(tilt);
+  ctx.scale(facing < 0 ? -1 : 1, 1);
+
+  // Contorno neon sutil (aura de escudo/terminal cibernético do TerminalVisual.gd)
+  ctx.strokeStyle = isMe ? 'rgba(255, 255, 255, 0.22)' : 'rgba(0, 230, 255, 0.14)';
+  ctx.lineWidth = 2.2;
+  ctx.strokeRect(-12, -22, 24, 45);
+
+  ctx.strokeStyle = color;
+  ctx.globalAlpha = 0.28;
+  ctx.lineWidth = 1.2;
+  ctx.strokeRect(-11, -21, 22, 43);
+  ctx.globalAlpha = 1.0;
+
+  // Calça Jeans com animação de passos
+  ctx.fillStyle = skin.pantsColor;
+  ctx.fillRect(-8, 8 + legSwing * 0.5, 7, 14);
+  ctx.fillRect(1, 8 - legSwing * 0.5, 7, 14);
+
+  // Highlight da calça jeans
+  ctx.fillStyle = skin.pantsHighlight;
+  ctx.fillRect(-8, 8 + legSwing * 0.5, 2, 14);
+  ctx.fillRect(1, 8 - legSwing * 0.5, 2, 14);
+
+  // Tênis / Sapatos de dev
+  ctx.fillStyle = '#0f172a';
+  ctx.fillRect(-9, 20 + legSwing * 0.5, 8, 3);
+  ctx.fillRect(1, 20 - legSwing * 0.5, 8, 3);
+  ctx.fillStyle = color;
+  ctx.fillRect(-9, 22 + legSwing * 0.5, 8, 1);
+  ctx.fillRect(1, 22 - legSwing * 0.5, 8, 1);
+
+  // Tronco (Camiseta preta de dev com logo neon)
+  ctx.fillStyle = skin.shirtColor;
+  ctx.fillRect(-10, -6, 20, 16);
+
+  // Detalhe lateral da cor do player na camiseta
+  ctx.fillStyle = color;
+  ctx.globalAlpha = 0.85;
+  ctx.fillRect(-10, -6, 2, 15);
+  ctx.fillRect(8, -6, 2, 15);
+  ctx.globalAlpha = 1.0;
+
+  // Estampa </> no peito
+  ctx.fillStyle = color;
+  ctx.font = '800 6px "JetBrains Mono", monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('</>', 0, 1);
+
+  // Braços e Mãos segurando o teclado
+  ctx.fillStyle = skin.skinColor;
+  ctx.fillRect(-14, -4, 4, 12);
+  ctx.fillRect(10, -4, 4, 12);
+
+  // Crachá de Empresa (Cordão na cor do Dev + cartão branco com chip)
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.8;
+  ctx.beginPath();
+  ctx.moveTo(-5, -6);
+  ctx.lineTo(0, 2);
+  ctx.moveTo(5, -6);
+  ctx.lineTo(0, 2);
+  ctx.stroke();
+
+  ctx.fillStyle = '#ebeff5';
+  ctx.fillRect(-3, 2, 6, 8);
+  ctx.fillStyle = color;
+  ctx.fillRect(-2, 3, 4, 3);
+
+  // Capuz traseiro (se for SecOps Hacker)
+  if (skin.hasHoodie) {
+    ctx.fillStyle = '#181824';
+    ctx.fillRect(-9, -21, 18, 15);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(-9, -21, 18, 15);
+  }
+
+  // Rosto / Cabeça
+  ctx.fillStyle = skin.skinColor;
+  ctx.fillRect(-7, -18, 14, 12);
+
+  // Barba estilo Dev Sênior (se for Backend Tank)
+  if (skin.hasBeard) {
+    ctx.fillStyle = skin.hairColor;
+    ctx.fillRect(-7, -9, 14, 3);
+    ctx.fillRect(-5, -10, 10, 2);
+  }
+
+  // Cabelo arrumado (Castanho escuro com volume do TerminalVisual.gd)
+  ctx.fillStyle = skin.hairColor;
+  ctx.fillRect(-8, -20, 16, 5);
+  ctx.fillRect(-8, -17, 3, 4);
+  ctx.fillStyle = skin.hairHighlight;
+  ctx.fillRect(-6, -21, 12, 2);
+
+  // Headset Gamer / Dev (para Frontend / Backend)
+  if (skin.hasHeadset) {
+    ctx.fillStyle = color;
+    ctx.fillRect(-9, -15, 2, 6);
+    ctx.fillRect(7, -15, 2, 6);
+    ctx.fillRect(-8, -22, 16, 1.5);
+  }
+
+  // Óculos de armação neon (marca registrada do DevDash original!)
+  ctx.fillStyle = 'rgba(0, 235, 255, 0.45)';
+  ctx.fillRect(-6, -14, 5, 4);
+  ctx.fillRect(1, -14, 5, 4);
+
+  // Brilho da lente do óculos
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.65)';
+  ctx.fillRect(-5, -13, 2, 1.5);
+  ctx.fillRect(2, -13, 2, 1.5);
+
+  // Armação do óculos na cor neon do Dev
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.2;
+  ctx.strokeRect(-6, -14, 5, 4);
+  ctx.strokeRect(1, -14, 5, 4);
+
+  // Ponte do óculos
+  ctx.beginPath();
+  ctx.moveTo(-1, -12);
+  ctx.lineTo(1, -12);
+  ctx.stroke();
+
+  // Teclado Mecânico RGB com glow aprimorado nas mãos do Dev
+  ctx.fillStyle = 'rgba(0, 230, 255, 0.16)';
+  ctx.fillRect(-19, 1, 38, 14);
+  ctx.fillStyle = 'rgba(25, 255, 128, 0.22)';
+  ctx.fillRect(-17.5, 2.5, 35, 11);
+
+  // Corpo do teclado mecânico
+  ctx.fillStyle = '#1f2129';
+  ctx.fillRect(-16, 4, 32, 8);
+  ctx.fillStyle = '#333842';
+  ctx.fillRect(-14, 5, 28, 6);
+
+  // Teclas RGB iluminadas (Vermelho, Verde barra de espaço, Azul)
+  const keyRects = [
+    { x: -12, y: 6, w: 4, h: 4 },
+    { x: -6, y: 6, w: 12, h: 4 },
+    { x: 8, y: 6, w: 4, h: 4 },
+  ];
+  for (let i = 0; i < keyRects.length; i++) {
+    const k = keyRects[i];
+    const gCol = KEY_GLOW_COLORS[i];
+    ctx.fillStyle = gCol;
+    ctx.globalAlpha = 0.35;
+    ctx.fillRect(k.x - 1, k.y - 1, k.w + 2, k.h + 2);
+    ctx.globalAlpha = 1.0;
+    ctx.fillRect(k.x, k.y, k.w, k.h);
+  }
+
+  ctx.restore();
+}
+
 export class GameRenderer {
   constructor(canvas) {
     this.canvas = canvas;
@@ -398,40 +629,29 @@ export class GameRenderer {
       ctx.fillText('🛡️ CODANDO JS (IMUNE)', 0, -46);
     }
 
-    // Sombra
-    ctx.fillStyle = 'rgba(0,0,0,0.5)';
-    ctx.beginPath();
-    ctx.ellipse(0, 18, 14, 6, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Corpo Cyberpunk do Dev
-    const bounce = Math.abs(Math.sin(p.walkCycle)) * 2.5;
-    ctx.translate(0, -bounce);
-
-    ctx.fillStyle = '#1e293b';
-    ctx.strokeStyle = p.color;
-    ctx.lineWidth = isMe ? 3 : 2;
-    ctx.beginPath();
-    ctx.roundRect(-13, -12, 26, 26, 7);
-    ctx.fill();
-    ctx.stroke();
-
-    // Visor Neon
-    ctx.fillStyle = p.color;
-    ctx.fillRect(-8, -7, 16, 6);
+    // Bonequinho original do DevDash (Desenvolvedor de Óculos + Crachá + Camiseta </> + Teclado RGB)
+    drawDeveloperCharacter(ctx, {
+      devClass: p.devClass,
+      color: p.color,
+      walkCycle: p.walkCycle,
+      facing: p.facing || 1,
+      isMe,
+    });
 
     // Nome, Level e Barra de HP acima do boneco
+    const bounce = p.walkCycle > 0.01 ? Math.abs(Math.sin(p.walkCycle * 2.0)) * 2.2 : 0;
+    ctx.translate(0, -bounce);
     ctx.font = '800 11px "JetBrains Mono", monospace';
     ctx.textAlign = 'center';
     ctx.fillStyle = isMe ? '#ffffff' : p.color;
-    ctx.fillText(`${p.name} [L${p.level}]`, 0, -29);
+    ctx.fillText(`${p.name} [L${p.level}]`, 0, -34);
 
     const hpW = 34;
     const hpPct = Math.max(0, p.hp / p.maxHp);
     ctx.fillStyle = 'rgba(0,0,0,0.75)';
-    ctx.fillRect(-hpW / 2, -23, hpW, 4.5);
-    ctx.fillStyle = p.isCoding ? '#33ff88' : isMe ? '#00e5ff' : p.color;
-    ctx.fillRect(-hpW / 2, -23, hpW * hpPct, 4.5);
+    ctx.fillRect(-hpW / 2, -29, hpW, 4.5);
+    ctx.fillStyle = p.isCoding ? '#33ff88' : p.color;
+    ctx.fillRect(-hpW / 2, -29, hpW * hpPct, 4.5);
 
     ctx.restore();
   }

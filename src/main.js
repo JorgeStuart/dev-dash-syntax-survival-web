@@ -5,9 +5,9 @@ import {
   normalizeCode,
 } from './coding/js_challenges.js';
 import { GameEngine, UPGRADE_OPTIONS } from './game/engine.js';
-import { GameRenderer } from './game/renderer.js';
+import { drawDeveloperCharacter, GameRenderer } from './game/renderer.js';
 import { getPowerupThreshold } from './game/types.js';
-import { P2PManager } from './network/p2p_manager.js';
+import { DEV_CLASSES, P2PManager, PLAYER_COLORS } from './network/p2p_manager.js';
 
 const canvas = document.getElementById('game-canvas');
 const renderer = new GameRenderer(canvas);
@@ -18,6 +18,7 @@ const p2p = new P2PManager();
 const lobbyScreen = document.getElementById('lobby-screen');
 const playerNameInput = document.getElementById('player-name-input');
 const classCards = document.querySelectorAll('.class-card');
+const colorSelectorEl = document.getElementById('color-selector');
 const connectionStatus = document.getElementById('connection-status');
 const btnCreateRoom = document.getElementById('btn-create-room');
 const roomCodeInput = document.getElementById('room-code-input');
@@ -77,8 +78,10 @@ const btnPlayAgain = document.getElementById('btn-play-again');
 const btnBackLobby = document.getElementById('btn-back-lobby');
 
 let selectedClass = 'fullstack';
+let selectedColor = PLAYER_COLORS[0];
 let isPlaying = false;
 let currentSnapshot = engine.snapshot;
+let previewWalkPhase = 0;
 
 // Controle de Teclado (WASD / Setas)
 const keysDown = new Set();
@@ -91,19 +94,137 @@ let currentMergeChallenge = null;
 let mergePenaltyUntil = 0;
 let lastRenderedPendingUpgrades = 0;
 
-// 1. Seleção de Classe no Lobby
+// Inicializa seletor de cores neon
+function renderColorSwatches() {
+  if (!colorSelectorEl) return;
+  const others = p2p.lobbyPlayers.filter((p) => p.id !== p2p.myId);
+  const takenColors = new Map(others.map((p) => [p.color, p.name]));
+
+  colorSelectorEl.innerHTML = PLAYER_COLORS.map((col) => {
+    const ownerName = takenColors.get(col);
+    const isTaken = Boolean(ownerName);
+    const isSelected = col === selectedColor;
+    const title = isTaken ? `Cor em uso por ${ownerName}` : `Selecionar cor ${col}`;
+    return `<button type="button" class="color-swatch-btn ${isSelected ? 'selected' : ''} ${isTaken ? 'taken' : ''}" data-color="${col}" title="${escapeHtml(title)}" style="background:${col}; color:${col}"></button>`;
+  }).join('');
+
+  colorSelectorEl.querySelectorAll('.color-swatch-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const col = btn.dataset.color;
+      if (!col || btn.classList.contains('taken')) {
+        sfx.keyError();
+        connectionStatus.textContent = 'Essa cor neon já está em uso por outro Dev na sala!';
+        connectionStatus.style.color = '#ff3344';
+        return;
+      }
+      selectedColor = col;
+      sfx.keyHit();
+      syncLobbySelectionUI();
+      p2p.updateMyProfile(playerNameInput.value.trim() || 'Dev_Master', selectedClass, selectedColor);
+    });
+  });
+}
+
+function syncLobbySelectionUI() {
+  const others = p2p.lobbyPlayers.filter((p) => p.id !== p2p.myId);
+  const takenClasses = new Map();
+  for (const p of others) {
+    if (!takenClasses.has(p.devClass)) {
+      takenClasses.set(p.devClass, p.name);
+    }
+  }
+  const allFourClassesTakenByOthers = DEV_CLASSES.every((c) => takenClasses.has(c));
+
+  classCards.forEach((card) => {
+    const cName = card.dataset.class || 'fullstack';
+    const statusTag = card.querySelector('.class-status-tag');
+    const ownerName = takenClasses.get(cName);
+    const isSelected = cName === selectedClass;
+    const isLocked = Boolean(ownerName) && !allFourClassesTakenByOthers;
+
+    card.classList.toggle('selected', isSelected);
+    card.classList.toggle('taken', isLocked);
+
+    if (statusTag) {
+      if (isSelected) {
+        statusTag.textContent = 'SEU DEV';
+      } else if (isLocked) {
+        statusTag.textContent = `EM USO (${ownerName})`;
+      } else if (ownerName && allFourClassesTakenByOthers) {
+        statusTag.textContent = 'DISPONÍVEL (OUTRA COR)';
+      } else {
+        statusTag.textContent = 'LIVRE';
+      }
+    }
+  });
+
+  renderColorSwatches();
+  renderAllCharacterPreviews();
+}
+
+function renderAllCharacterPreviews() {
+  const others = p2p.lobbyPlayers.filter((p) => p.id !== p2p.myId);
+  const classOwnerColor = new Map(others.map((p) => [p.devClass, p.color]));
+
+  document.querySelectorAll('.dev-preview-canvas').forEach((cnv) => {
+    const ctx = cnv.getContext('2d');
+    if (!ctx) return;
+    const cName = cnv.dataset.previewClass || 'fullstack';
+    const card = cnv.closest('.class-card');
+    const defaultCol = card?.dataset.defaultColor || '#00e5ff';
+    const isSelected = cName === selectedClass;
+    const displayColor = isSelected
+      ? selectedColor
+      : classOwnerColor.get(cName) || defaultCol;
+
+    ctx.clearRect(0, 0, cnv.width, cnv.height);
+    ctx.save();
+    ctx.translate(cnv.width / 2, cnv.height / 2 + 3);
+    ctx.scale(1.08, 1.08);
+    drawDeveloperCharacter(ctx, {
+      devClass: cName,
+      color: displayColor,
+      walkCycle: isSelected ? previewWalkPhase : 0,
+      facing: 1,
+      isMe: isSelected,
+    });
+    ctx.restore();
+  });
+}
+
+// 1. Seleção de Boneco / Classe no Lobby
 classCards.forEach((card) => {
   card.addEventListener('click', () => {
-    classCards.forEach((c) => c.classList.remove('selected'));
-    card.classList.add('selected');
-    selectedClass = card.dataset.class || 'fullstack';
-    p2p.updateHostProfile(playerNameInput.value.trim() || 'Dev_Host', selectedClass);
+    const candidateClass = card.dataset.class || 'fullstack';
+    if (card.classList.contains('taken')) {
+      sfx.keyError();
+      connectionStatus.textContent = 'Esse boneco já foi escolhido na sala! Escolha um dos livres.';
+      connectionStatus.style.color = '#ff3344';
+      return;
+    }
+
+    selectedClass = candidateClass;
+    // Se não estiver em sala ainda (ou se a cor padrão da classe estiver livre), sugere a cor temática
+    const defaultCol = card.dataset.defaultColor;
+    const others = p2p.lobbyPlayers.filter((p) => p.id !== p2p.myId);
+    const takenColors = new Set(others.map((p) => p.color));
+    if (defaultCol && !takenColors.has(defaultCol)) {
+      selectedColor = defaultCol;
+    } else if (takenColors.has(selectedColor)) {
+      selectedColor = PLAYER_COLORS.find((c) => !takenColors.has(c)) || selectedColor;
+    }
+
+    sfx.keyHit();
+    syncLobbySelectionUI();
+    p2p.updateMyProfile(playerNameInput.value.trim() || 'Dev_Master', selectedClass, selectedColor);
   });
 });
 
 playerNameInput.addEventListener('input', () => {
-  p2p.updateHostProfile(playerNameInput.value.trim() || 'Dev_Host', selectedClass);
+  p2p.updateMyProfile(playerNameInput.value.trim() || 'Dev_Master', selectedClass, selectedColor);
 });
+
+syncLobbySelectionUI();
 
 // 2. Callbacks P2P
 p2p.onStatusChange = (status, isErr) => {
@@ -115,11 +236,24 @@ p2p.onLobbyChange = (players, roomCode) => {
   roomLobbyBox.classList.remove('hidden');
   activeRoomCodeEl.textContent = roomCode;
   lobbyPlayerCount.textContent = String(players.length);
+
+  // Sincroniza o bonequinho e a cor atribuídos a mim pelo Host (evita duplicatas!)
+  const meInLobby = players.find((p) => p.id === p2p.myId);
+  if (meInLobby) {
+    selectedClass = meInLobby.devClass;
+    selectedColor = meInLobby.color;
+  }
+
+  syncLobbySelectionUI();
+
   lobbyPlayersList.innerHTML = players
     .map(
       (p) => `
       <li>
-        <span style="color:${p.color}; font-weight:800">${escapeHtml(p.name)} ${p.isHost ? '👑' : ''}</span>
+        <span style="display:flex; align-items:center; gap:8px; color:${p.color}; font-weight:800">
+          <span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:${p.color}; box-shadow:0 0 6px ${p.color}"></span>
+          ${escapeHtml(p.name)} ${p.isHost ? '👑' : ''}
+        </span>
         <span style="color:#94a3b8; font-size:11px">${p.devClass.toUpperCase()}</span>
       </li>`
     )
@@ -173,7 +307,7 @@ p2p.onSnapshotReceived = (snapshot) => {
 // Botões de Sala
 btnCreateRoom.addEventListener('click', async () => {
   const name = playerNameInput.value.trim() || 'Dev_Master';
-  await p2p.createRoom(name, selectedClass);
+  await p2p.createRoom(name, selectedClass, selectedColor);
 });
 
 btnJoinRoom.addEventListener('click', () => {
@@ -183,7 +317,7 @@ btnJoinRoom.addEventListener('click', () => {
     return;
   }
   const name = playerNameInput.value.trim() || 'Dev_Client';
-  p2p.joinRoom(code, name, selectedClass);
+  p2p.joinRoom(code, name, selectedClass, selectedColor);
 });
 
 btnCopyLink.addEventListener('click', () => {
@@ -629,7 +763,9 @@ function gameLoop(now) {
     renderer.render(currentSnapshot, p2p.myId, dt);
     updateHUD();
   } else {
-    // Fundo animado mesmo no lobby
+    // Fundo animado e preview animado do bonequinho selecionado no lobby
+    previewWalkPhase += dt * 7.5;
+    renderAllCharacterPreviews();
     renderer.render(currentSnapshot, p2p.myId, dt);
   }
 

@@ -29,10 +29,12 @@ export const UPGRADE_OPTIONS = [
 ];
 
 const BOT_PROFILES = [
+  { name: 'Full_Felipe', devClass: 'fullstack', color: '#00e5ff' },
   { name: 'Async_Ana', devClass: 'frontend', color: '#ff2d95' },
   { name: 'Rust_Rob', devClass: 'backend', color: '#33ff88' },
   { name: 'Sec_Samuca', devClass: 'secops', color: '#ffb020' },
 ];
+const FALLBACK_COLORS = ['#00e5ff', '#ff2d95', '#33ff88', '#ffb020', '#a855f7', '#38bdf8', '#f43f5e', '#eab308'];
 
 export class GameEngine {
   constructor() {
@@ -76,13 +78,23 @@ export class GameEngine {
     const allParticipants = [...lobbyPlayers];
     if (fillBots && allParticipants.length < 4) {
       const needed = 4 - allParticipants.length;
+      const usedClasses = new Set(allParticipants.map((p) => p.devClass));
+      const usedColors = new Set(allParticipants.map((p) => p.color));
+      const availableBots = BOT_PROFILES.filter((b) => !usedClasses.has(b.devClass));
+
       for (let i = 0; i < needed; i++) {
-        const b = BOT_PROFILES[i % BOT_PROFILES.length];
+        const b = availableBots[i] || BOT_PROFILES[i % BOT_PROFILES.length];
+        usedClasses.add(b.devClass);
+        const botColor = !usedColors.has(b.color)
+          ? b.color
+          : FALLBACK_COLORS.find((c) => !usedColors.has(c)) || b.color;
+        usedColors.add(botColor);
+
         allParticipants.push({
           id: `bot-${i + 1}`,
           name: b.name,
           devClass: b.devClass,
-          color: b.color,
+          color: botColor,
           isHost: false,
           isBot: true,
         });
@@ -143,6 +155,7 @@ export class GameEngine {
       firewallLevel: isTank ? 1 : 0,
       magnetRadius: 115,
       walkCycle: 0,
+      facing: 1,
     };
   }
 
@@ -462,6 +475,8 @@ export class GameEngine {
         p.x += p.vx * dt;
         p.y += p.vy * dt;
         p.walkCycle += dt * 13;
+        if (p.vx < -5) p.facing = -1;
+        else if (p.vx > 5) p.facing = 1;
       } else {
         p.vx = 0;
         p.vy = 0;
