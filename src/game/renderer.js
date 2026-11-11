@@ -78,17 +78,6 @@ export function drawDeveloperCharacter(ctx, { devClass = 'fullstack', color = '#
   ctx.rotate(tilt);
   ctx.scale(facing < 0 ? -1 : 1, 1);
 
-  // Contorno neon sutil (aura de escudo/terminal cibernético do TerminalVisual.gd)
-  ctx.strokeStyle = isMe ? 'rgba(255, 255, 255, 0.22)' : 'rgba(0, 230, 255, 0.14)';
-  ctx.lineWidth = 2.2;
-  ctx.strokeRect(-12, -22, 24, 45);
-
-  ctx.strokeStyle = color;
-  ctx.globalAlpha = 0.28;
-  ctx.lineWidth = 1.2;
-  ctx.strokeRect(-11, -21, 22, 43);
-  ctx.globalAlpha = 1.0;
-
   // Calça Jeans com animação de passos
   ctx.fillStyle = skin.pantsColor;
   ctx.fillRect(-8, 8 + legSwing * 0.5, 7, 14);

@@ -847,11 +847,10 @@ export class GameEngine {
       let speedMult = 1.0;
 
       if (p.isCoding) {
-        // ESCUDO DE FOCO ATIVO: Piloto Automático inteligente + Invulnerável (Zero Dano)!
-        const autoVec = this.computeAutoPilotVector(p);
-        moveX = autoVec.x;
-        moveY = autoVec.y;
-        speedMult = 0.78;
+        // ESCUDO DE FOCO ATIVO: Boneco fica parado no terminal, invulnerável (zero dano) e focado no código!
+        moveX = 0;
+        moveY = 0;
+        speedMult = 0;
       } else if (p.isBot) {
         const botVec = this.computeBotVector(p, dt);
         moveX = botVec.x;

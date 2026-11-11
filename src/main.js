@@ -505,12 +505,107 @@ window.addEventListener('keyup', (e) => {
   keysDown.delete(e.key.toLowerCase());
 });
 
+// Elementos DOM — Touch Controls (Mobile)
+const touchControlsEl = document.getElementById('touch-controls');
+const joystickZoneEl = document.getElementById('joystick-zone');
+const joystickBaseEl = document.getElementById('joystick-base');
+const joystickStickEl = document.getElementById('joystick-stick');
+const btnTouchActionEl = document.getElementById('btn-touch-action');
+
+let touchMoveVec = { dx: 0, dy: 0 };
+let activeTouchId = null;
+
+if (joystickZoneEl && joystickStickEl) {
+  const maxRadius = 45;
+
+  const handleJoystickMove = (clientX, clientY) => {
+    const rect = joystickBaseEl.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    const diffX = clientX - centerX;
+    const diffY = clientY - centerY;
+    const dist = Math.hypot(diffX, diffY);
+
+    if (dist <= 0.001) {
+      touchMoveVec = { dx: 0, dy: 0 };
+      joystickStickEl.style.transform = 'translate(0px, 0px)';
+      return;
+    }
+
+    const clampedDist = Math.min(dist, maxRadius);
+    const normX = diffX / dist;
+    const normY = diffY / dist;
+
+    touchMoveVec = {
+      dx: normX * (clampedDist / maxRadius),
+      dy: normY * (clampedDist / maxRadius),
+    };
+
+    const posX = normX * clampedDist;
+    const posY = normY * clampedDist;
+    joystickStickEl.style.transform = `translate(${posX}px, ${posY}px)`;
+  };
+
+  const resetJoystick = () => {
+    activeTouchId = null;
+    touchMoveVec = { dx: 0, dy: 0 };
+    joystickStickEl.style.transform = 'translate(0px, 0px)';
+  };
+
+  joystickZoneEl.addEventListener('touchstart', (e) => {
+    if (activeTouchId !== null) return;
+    const t = e.changedTouches[0];
+    activeTouchId = t.identifier;
+    handleJoystickMove(t.clientX, t.clientY);
+  }, { passive: false });
+
+  window.addEventListener('touchmove', (e) => {
+    if (activeTouchId === null) return;
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      const t = e.changedTouches[i];
+      if (t.identifier === activeTouchId) {
+        handleJoystickMove(t.clientX, t.clientY);
+        break;
+      }
+    }
+  }, { passive: false });
+
+  window.addEventListener('touchend', (e) => {
+    if (activeTouchId === null) return;
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      if (e.changedTouches[i].identifier === activeTouchId) {
+        resetJoystick();
+        break;
+      }
+    }
+  });
+
+  window.addEventListener('touchcancel', () => {
+    resetJoystick();
+  });
+}
+
+if (btnTouchActionEl) {
+  btnTouchActionEl.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    if (!isPlaying) return;
+    const me = currentSnapshot.players.find((p) => p.id === p2p.myId);
+    if (me) checkTerminalProximity(me.x, me.y, currentSnapshot.terminals, true);
+  });
+  btnTouchActionEl.addEventListener('click', (e) => {
+    e.preventDefault();
+    if (!isPlaying) return;
+    const me = currentSnapshot.players.find((p) => p.id === p2p.myId);
+    if (me) checkTerminalProximity(me.x, me.y, currentSnapshot.terminals, true);
+  });
+}
+
 function computeLocalInput() {
   if (activeTerminalId !== null || !mergeModal.classList.contains('hidden')) {
     return { dx: 0, dy: 0 };
   }
-  let dx = 0;
-  let dy = 0;
+  let dx = touchMoveVec.dx;
+  let dy = touchMoveVec.dy;
   if (keysDown.has('w') || keysDown.has('arrowup')) dy -= 1;
   if (keysDown.has('s') || keysDown.has('arrowdown')) dy += 1;
   if (keysDown.has('a') || keysDown.has('arrowleft')) dx -= 1;
