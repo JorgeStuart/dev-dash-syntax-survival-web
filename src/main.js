@@ -269,6 +269,13 @@ p2p.onLobbyChange = (players, roomCode) => {
   }
 };
 
+p2p.onPlayerDisconnect = (playerId) => {
+  if (!p2p.isHost) return;
+  engine.handlePlayerDisconnect(playerId);
+  currentSnapshot = engine.snapshot;
+  p2p.broadcastSnapshot(currentSnapshot);
+};
+
 p2p.onClientMessage = (playerId, msg) => {
   if (!p2p.isHost) return;
   switch (msg.type) {
@@ -292,6 +299,14 @@ p2p.onClientMessage = (playerId, msg) => {
       break;
     case 'choose_upgrade':
       engine.applyUpgrade(playerId, msg.upgradeId);
+      break;
+    case 'request_rematch':
+      if (currentSnapshot.matchEnded) {
+        engine.startNewMatch(p2p.lobbyPlayers, chkFillBots.checked);
+        currentSnapshot = engine.snapshot;
+        p2p.broadcastMatchStart(currentSnapshot);
+        enterMatchUI();
+      }
       break;
   }
 };
@@ -759,6 +774,9 @@ btnPlayAgain.addEventListener('click', () => {
     currentSnapshot = engine.snapshot;
     p2p.broadcastMatchStart(currentSnapshot);
     enterMatchUI();
+  } else {
+    p2p.sendToHost({ type: 'request_rematch' });
+    podiumWinnerBanner.innerHTML = '🔄 Solicitação de nova Sprint enviada ao Host! Iniciando...';
   }
 });
 

@@ -185,6 +185,33 @@ export class GameEngine {
     p.terminalCooldownRemaining = TERMINAL_COOLDOWN;
   }
 
+  handlePlayerDisconnect(playerId) {
+    const p = this.snapshot.players.find((pl) => pl.id === playerId);
+    if (!p) return false;
+    if (p.codingType === 'terminal' || p.terminalId !== null) {
+      this.releaseTerminal(p);
+    }
+    this.inputs.delete(playerId);
+    this.fireTimers.delete(playerId);
+    this.lightningTimers.delete(playerId);
+    this.botTerminalTimers.delete(playerId);
+    this.snapshot.players = this.snapshot.players.filter((pl) => pl.id !== playerId);
+
+    const merge = this.snapshot.activeMerge;
+    if (merge) {
+      merge.completedOrder = merge.completedOrder.filter((id) =>
+        this.snapshot.players.some((pl) => pl.id === id)
+      );
+      if (
+        this.snapshot.players.length > 0 &&
+        this.snapshot.players.every((pl) => merge.completedOrder.includes(pl.id))
+      ) {
+        this.finishMergeConflictEvent();
+      }
+    }
+    return true;
+  }
+
   setPlayerCoding(playerId, isCoding, terminalId = null) {
     const p = this.snapshot.players.find((pl) => pl.id === playerId);
     if (!p || p.respawnTimer > 0 || this.snapshot.matchEnded || this.snapshot.activeMerge) return false;
@@ -233,9 +260,9 @@ export class GameEngine {
   completeMergeChallenge(playerId, answer) {
     const merge = this.snapshot.activeMerge;
     const p = this.snapshot.players.find((pl) => pl.id === playerId);
-    if (!merge || !p || this.snapshot.matchEnded || merge.timeRemaining <= 0 || merge.completedOrder.includes(playerId)) return;
+    if (!merge || !p || this.snapshot.matchEnded || merge.timeRemaining <= 0 || merge.completedOrder.includes(playerId)) return false;
     const challenge = JS_MERGE_CHALLENGES.find((c) => c.id === merge.challengeId);
-    if (!p.isBot && ![challenge.correctAnswer, ...challenge.acceptedAliases].some((a) => normalizeCode(a) === normalizeCode(answer))) return;
+    if (!p.isBot && ![challenge.correctAnswer, ...challenge.acceptedAliases].some((a) => normalizeCode(a) === normalizeCode(answer))) return false;
 
     merge.completedOrder.push(playerId);
     const rank = merge.completedOrder.length;
@@ -257,11 +284,13 @@ export class GameEngine {
     if (merge.completedOrder.length >= this.snapshot.players.length) {
       this.finishMergeConflictEvent();
     }
+    return true;
   }
 
   applyUpgrade(playerId, upgradeId) {
     const p = this.snapshot.players.find((pl) => pl.id === playerId);
-    if (!p || p.pendingUpgrades <= 0) return;
+    if (!p || p.pendingUpgrades <= 0) return false;
+    if (!UPGRADE_OPTIONS.some((u) => u.id === upgradeId)) return false;
 
     p.pendingUpgrades -= 1;
     p.upgradesDone += 1;
@@ -294,6 +323,7 @@ export class GameEngine {
     }
 
     this.addFloatingText(p.x, p.y - 30, `⬆️ UPGRADE: ${upgradeId.toUpperCase()}`, '#00e5ff');
+    return true;
   }
 
   tick(dt) {

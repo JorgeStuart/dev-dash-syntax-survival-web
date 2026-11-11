@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { GameEngine, TERMINAL_DURATION, TERMINAL_COOLDOWN } from '../src/game/engine.js';
 import { JS_SPEED_SNIPPETS, JS_MERGE_CHALLENGES } from '../src/coding/js_challenges.js';
+import { P2PManager } from '../src/network/p2p_manager.js';
 
 function setup(count = 1) {
   const engine = new GameEngine();
@@ -114,4 +115,102 @@ test('new match resets timers and terminal sessions', () => {
   assert.equal(engine.snapshot.players[0].terminalId, null);
   assert.equal(engine.hackerTimer, 18);
   assert.ok(engine.snapshot.terminals.every(t => t.lockedByPlayerId === null));
+});
+
+test('disconnect during terminal and during merge cleans up reservations and unblocks merge completion', () => {
+  const { engine, p, term } = setup(2);
+  const p2 = engine.snapshot.players[1];
+
+  // Player 1 locks terminal then disconnects
+  assert.equal(engine.setPlayerCoding(p.id, true, term.id), true);
+  assert.equal(term.lockedByPlayerId, p.id);
+  assert.equal(engine.handlePlayerDisconnect(p.id), true);
+  assert.equal(term.lockedByPlayerId, null);
+  assert.equal(engine.snapshot.players.length, 1);
+
+  // Two players in Merge: p0 completes, p1 disconnects -> Merge finishes immediately
+  const { engine: eng2 } = setup(2);
+  eng2.startMergeConflictEvent();
+  const ans = JS_MERGE_CHALLENGES[0].correctAnswer;
+  assert.equal(eng2.completeMergeChallenge('p0', ans), true);
+  assert.ok(eng2.snapshot.activeMerge !== null);
+  assert.equal(eng2.handlePlayerDisconnect('p1'), true);
+  assert.equal(eng2.snapshot.activeMerge, null);
+});
+
+test('host rejects invalid upgrade ids and duplicate upgrade claims', () => {
+  const { engine, p } = setup(1);
+  p.pendingUpgrades = 1;
+  assert.equal(engine.applyUpgrade(p.id, 'invalid_hack'), false);
+  assert.equal(p.pendingUpgrades, 1);
+  assert.equal(p.score, 0);
+  assert.equal(engine.applyUpgrade(p.id, 'blaster'), true);
+  assert.equal(p.pendingUpgrades, 0);
+  assert.equal(engine.applyUpgrade(p.id, 'blaster'), false);
+});
+
+test('P2PManager connects two tabs via local channel fallback even when cloud PeerJS fails', async () => {
+  const channels = new Map();
+  const createMockChannel = (name) => {
+    if (!channels.has(name)) channels.set(name, new Set());
+    const peers = channels.get(name);
+    const ch = {
+      onmessage: null,
+      postMessage(data) {
+        for (const other of peers) {
+          if (other !== ch && other.onmessage) {
+            other.onmessage({ data: structuredClone(data) });
+          }
+        }
+      },
+      close() {
+        peers.delete(ch);
+      },
+    };
+    peers.add(ch);
+    return ch;
+  };
+
+  // Simula falha do PeerJS Cloud (ex: erro de rede/TLS no servidor público) sem desabilitar TLS
+  const failingPeerFactory = () => ({
+    on(event, cb) {
+      if (event === 'error') setTimeout(() => cb({ type: 'network' }), 0);
+    },
+    destroy() {},
+  });
+
+  const hostP2P = new P2PManager({ peerFactory: failingPeerFactory, channelFactory: createMockChannel });
+  const clientP2P = new P2PManager({ peerFactory: failingPeerFactory, channelFactory: createMockChannel });
+
+  const roomCode = await hostP2P.createRoom('HostDev', 'fullstack', '#00e5ff');
+  clientP2P.joinRoom(roomCode, 'ClientDev', 'fullstack', '#00e5ff');
+
+  assert.equal(hostP2P.lobbyPlayers.length, 2);
+  assert.equal(clientP2P.lobbyPlayers.length, 2);
+  // Garante classe e cor exclusivas atribuídas pelo Host
+  assert.notEqual(hostP2P.lobbyPlayers[0].devClass, hostP2P.lobbyPlayers[1].devClass);
+  assert.notEqual(hostP2P.lobbyPlayers[0].color, hostP2P.lobbyPlayers[1].color);
+  assert.equal(clientP2P.connectionState, 'local');
+
+  // Testa início de partida e sincronização de snapshot para 2 jogadores
+  const engine = new GameEngine();
+  let clientMatchStarted = false;
+  clientP2P.onMatchStart = (snap) => {
+    clientMatchStarted = snap.players.length === 2;
+  };
+  engine.startNewMatch(hostP2P.lobbyPlayers, false);
+  hostP2P.broadcastMatchStart(engine.snapshot);
+  assert.equal(clientMatchStarted, true);
+
+  // Testa desconexão do cliente
+  let disconnectedId = null;
+  hostP2P.onPlayerDisconnect = (id) => {
+    disconnectedId = id;
+    engine.handlePlayerDisconnect(id);
+  };
+  clientP2P.cleanup();
+  assert.ok(disconnectedId !== null);
+  assert.equal(hostP2P.lobbyPlayers.length, 1);
+  assert.equal(engine.snapshot.players.length, 1);
+  hostP2P.cleanup();
 });
