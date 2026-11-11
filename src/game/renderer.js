@@ -1,4 +1,4 @@
-import { JS_SPEED_SNIPPETS } from '../coding/js_challenges.js';
+import { ARENA_EFFECT_TYPES, JS_SPEED_SNIPPETS } from '../coding/js_challenges.js';
 import { ARENA_HALF, SERVER_RACKS, TERMINAL_DURATION, TERMINAL_RANGE } from './engine.js';
 
 const KEY_GLOW_COLORS = ['#ff2626', '#26ff59', '#2659ff'];
@@ -300,12 +300,22 @@ export class GameRenderer {
       this.drawServerRack(ctx, rack.x, rack.y, blinkPhase);
     }
 
-    // 5. Inimigos (Bugs, Hackers e Bosses)
+    // 5. Efeitos de Arena gerados por Código JS
+    if (snapshot.arenaEffects) {
+      for (const ef of snapshot.arenaEffects) {
+        this.drawArenaEffect(ctx, ef);
+      }
+    }
+
+    // 6. Inimigos (Bugs, Hackers e Bosses) + Boss Coletivo de Merge
     for (const enemy of snapshot.enemies) {
       this.drawEnemy(ctx, enemy);
     }
+    if (snapshot.collectiveBoss && snapshot.collectiveBoss.hp > 0) {
+      this.drawCollectiveBoss(ctx, snapshot.collectiveBoss);
+    }
 
-    // 6. Jogadores (Devs)
+    // 7. Jogadores (Devs)
     for (const player of snapshot.players) {
       this.drawPlayer(ctx, player, player.id === myPlayerId);
     }
@@ -416,13 +426,95 @@ export class GameRenderer {
     ctx.restore();
   }
 
+  drawArenaEffect(ctx, ef) {
+    const progress = 1 - Math.max(0, ef.life / (ef.maxLife || 0.65));
+    const curRadius = Math.max(18, ef.radius * (0.25 + progress * 0.75));
+    const alpha = Math.max(0, 1 - progress);
+    ctx.save();
+    ctx.translate(ef.x, ef.y);
+    ctx.strokeStyle = ef.color || '#00e5ff';
+    ctx.fillStyle = ef.color || '#00e5ff';
+    ctx.lineWidth = 3.5;
+    ctx.globalAlpha = alpha * 0.85;
+    ctx.beginPath();
+    ctx.arc(0, 0, curRadius, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = alpha * 0.14;
+    ctx.fill();
+    ctx.restore();
+  }
+
+  drawCollectiveBoss(ctx, boss) {
+    ctx.save();
+    const bounce = Math.abs(Math.sin((boss.walkCycle || 0) * 1.5)) * 3.5;
+    ctx.translate(boss.x, boss.y - bounce);
+
+    // Aura de conflito Git
+    const pulse = 52 + Math.sin(performance.now() * 0.006) * 6;
+    ctx.strokeStyle = boss.weakenStacks > 0 ? '#00e5ff' : '#ff2d95';
+    ctx.fillStyle = boss.weakenStacks > 0 ? 'rgba(0, 229, 255, 0.12)' : 'rgba(255, 45, 149, 0.12)';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.arc(0, 0, pulse, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // Corpo hexagonal do Monólito
+    ctx.fillStyle = boss.hitFlash > 0 ? '#ffffff' : '#161324';
+    ctx.strokeStyle = '#ff2d95';
+    ctx.lineWidth = 3.5;
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) {
+      const ang = (i * Math.PI) / 3 - Math.PI / 6;
+      const r = 34;
+      const px = Math.cos(ang) * r;
+      const py = Math.sin(ang) * r;
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Símbolo de conflito Git <<<< ==== >>>>
+    ctx.fillStyle = '#ff2d95';
+    ctx.font = '800 11px "JetBrains Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('<<<<', 0, -5);
+    ctx.fillStyle = '#00e5ff';
+    ctx.fillText('>>>>', 0, 9);
+
+    // Nome e vulnerabilidade acima do Monólito
+    ctx.font = '800 11px "JetBrains Mono", monospace';
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(`👾 ${boss.name}`, 0, -54);
+    if (boss.weakenStacks > 0) {
+      ctx.fillStyle = '#33ff88';
+      ctx.font = '800 10px "JetBrains Mono", monospace';
+      ctx.fillText(`⚡ VULNERÁVEL x${boss.weakenStacks} (+${boss.weakenStacks * 20}% DANO RECEBIDO)`, 0, -68);
+    }
+
+    // Barra de HP do Boss Coletivo
+    const bw = 96;
+    const pct = Math.max(0, boss.hp / boss.maxHp);
+    ctx.fillStyle = 'rgba(0,0,0,0.82)';
+    ctx.fillRect(-bw / 2, -46, bw, 7);
+    ctx.fillStyle = boss.weakenStacks > 0 ? '#00e5ff' : '#ff2d95';
+    ctx.fillRect(-bw / 2, -46, bw * pct, 7);
+
+    ctx.restore();
+  }
+
   drawCodeTerminal(ctx, term, me) {
+    const snippet = JS_SPEED_SNIPPETS.find((s) => s.id === term.snippetId);
+    const effectMeta = ARENA_EFFECT_TYPES[snippet?.effectType || term.effectType] || ARENA_EFFECT_TYPES.filter_purge;
     const pulse = 0.8 + Math.sin(performance.now() * 0.006) * 0.2;
     ctx.save();
     ctx.translate(term.x, term.y);
 
-    // Círculo de ativação no chão
-    ctx.strokeStyle = term.lockedByPlayerId ? '#ffb020' : '#33ff88';
+    // Círculo de ativação no chão com a cor temática do efeito
+    const ringColor = term.lockedByPlayerId ? '#ffb020' : effectMeta.color || '#33ff88';
+    ctx.strokeStyle = ringColor;
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.arc(0, 0, 38 * pulse, 0, Math.PI * 2);
@@ -435,27 +527,51 @@ export class GameRenderer {
 
     // Totem do Terminal JS
     ctx.fillStyle = '#0f172a';
-    ctx.strokeStyle = '#33ff88';
+    ctx.strokeStyle = ringColor;
     ctx.lineWidth = 2;
     ctx.fillRect(-18, -22, 36, 28);
     ctx.strokeRect(-18, -22, 36, 28);
 
-    ctx.fillStyle = '#33ff88';
+    ctx.fillStyle = ringColor;
     ctx.font = '800 11px "JetBrains Mono", monospace';
     ctx.textAlign = 'center';
     ctx.fillText('JS>_', 0, -4);
 
-    if (me && Math.hypot(me.x - term.x, me.y - term.y) < 110 && !me.isCoding) {
+    // Tag compacta sempre visível acima do terminal (Assunto + Efeito)
+    if (snippet) {
+      ctx.fillStyle = effectMeta.color || '#00e5ff';
+      ctx.font = '800 9px "JetBrains Mono", monospace';
+      ctx.fillText(`${effectMeta.icon} ${effectMeta.shortTag}`, 0, -28);
+    }
+
+    if (me && Math.hypot(me.x - term.x, me.y - term.y) < 130 && !me.isCoding) {
       ctx.fillStyle = '#ffffff';
       ctx.font = '800 10px "JetBrains Mono", monospace';
-      const snippet = JS_SPEED_SNIPPETS.find((s) => s.id === term.snippetId);
       const bonus = me.devClass === 'secops' ? 1.25 : 1;
-      const label = term.lockedByPlayerId ? 'EM USO' : me.terminalCooldownRemaining > 0
+      const modeMap = {
+        typing: 'DIGITAÇÃO',
+        complete: 'COMPLETAR',
+        spot_bug: 'ACHAR BUG',
+        fix_code: 'CORRIGIR',
+      };
+      const modeLabel = modeMap[snippet?.mode || term.mode] || 'DESAFIO';
+      const label = term.lockedByPlayerId
+        ? 'EM USO'
+        : me.terminalCooldownRemaining > 0
         ? `RECARGA: ${Math.ceil(me.terminalCooldownRemaining)}s`
         : Math.hypot(me.x - term.x, me.y - term.y) > TERMINAL_RANGE
-          ? 'APROXIME-SE PARA CODAR' : `[E] CODAR • FOCO ${TERMINAL_DURATION}s`;
+        ? 'APROXIME-SE PARA CODAR'
+        : `[E] ${modeLabel} • FOCO ${TERMINAL_DURATION}s`;
       ctx.fillText(label, 0, 26);
-      if (snippet) ctx.fillText(`+${Math.round(snippet.commitsReward * bonus)} COMMITS / +${Math.round(snippet.xpReward * bonus)} XP`, 0, 42);
+      if (snippet) {
+        ctx.fillText(
+          `+${Math.round(snippet.commitsReward * bonus)} COMMITS / +${Math.round(snippet.xpReward * bonus)} XP`,
+          0,
+          40
+        );
+        ctx.fillStyle = effectMeta.color || '#33ff88';
+        ctx.fillText(effectMeta.label, 0, 54);
+      }
     }
 
     ctx.restore();
@@ -616,7 +732,21 @@ export class GameRenderer {
       }
     }
 
-    // 3. ESCUDO DE FOCO (Piloto Automático + Invulnerável enquanto coda!)
+    // 3. Buffs Temporários de Programação (Overclock, Garbage Collector, Logic Firewall)
+    if (p.activeBuffs && p.respawnTimer <= 0) {
+      const activeTags = [];
+      if ((p.activeBuffs.async_overclock || 0) > 0) activeTags.push('⚡ OVERCLOCK');
+      if ((p.activeBuffs.memory_gc || 0) > 0) activeTags.push('🧲 GC ÍMÃ');
+      if ((p.activeBuffs.logic_firewall || 0) > 0) activeTags.push('🔥 +25% DANO');
+      if (activeTags.length > 0 && !p.isCoding) {
+        ctx.fillStyle = '#ffb020';
+        ctx.font = '800 9px "JetBrains Mono", monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(activeTags.join(' • '), 0, -45);
+      }
+    }
+
+    // 4. ESCUDO DE FOCO (Piloto Automático + Invulnerável enquanto coda!)
     if (p.isCoding && p.respawnTimer <= 0) {
       const pulse = 32 + Math.sin(performance.now() * 0.01) * 3;
       ctx.save();
@@ -688,12 +818,24 @@ export class GameRenderer {
       ctx.fillRect(cx + t.x * scale - 2, cy + t.y * scale - 2, 4, 4);
     }
 
-    // Bosses (pontos vermelhos maiores)
+    // Bosses e Monólito Coletivo (pontos vermelhos/magenta maiores)
     for (const e of snapshot.enemies) {
       if (e.kind !== 'boss') continue;
       ctx.fillStyle = '#ff3344';
       ctx.beginPath();
       ctx.arc(cx + e.x * scale, cy + e.y * scale, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    if (snapshot.collectiveBoss && snapshot.collectiveBoss.hp > 0) {
+      ctx.fillStyle = '#ff2d95';
+      ctx.beginPath();
+      ctx.arc(
+        cx + snapshot.collectiveBoss.x * scale,
+        cy + snapshot.collectiveBoss.y * scale,
+        5,
+        0,
+        Math.PI * 2
+      );
       ctx.fill();
     }
 

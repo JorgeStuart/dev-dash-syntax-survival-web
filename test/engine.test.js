@@ -1,7 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { GameEngine, TERMINAL_DURATION, TERMINAL_COOLDOWN } from '../src/game/engine.js';
-import { JS_SPEED_SNIPPETS, JS_MERGE_CHALLENGES } from '../src/coding/js_challenges.js';
+import {
+  JS_SPEED_SNIPPETS,
+  JS_MERGE_CHALLENGES,
+  isEquivalentJsAnswer,
+} from '../src/coding/js_challenges.js';
 import { P2PManager } from '../src/network/p2p_manager.js';
 
 function setup(count = 1) {
@@ -213,4 +217,61 @@ test('P2PManager connects two tabs via local channel fallback even when cloud Pe
   assert.equal(hostP2P.lobbyPlayers.length, 1);
   assert.equal(engine.snapshot.players.length, 1);
   hostP2P.cleanup();
+});
+
+test('challenge bank has at least 20 terminal and 20 merge challenges across topics, difficulties and modes', () => {
+  assert.ok(JS_SPEED_SNIPPETS.length >= 20, `Expected >= 20 terminal challenges, got ${JS_SPEED_SNIPPETS.length}`);
+  assert.ok(JS_MERGE_CHALLENGES.length >= 20, `Expected >= 20 merge challenges, got ${JS_MERGE_CHALLENGES.length}`);
+
+  const requiredTopics = ['arrays', 'objetos', 'condicoes', 'funcoes', 'promises', 'async_await'];
+  const allTopics = new Set([
+    ...JS_SPEED_SNIPPETS.map((s) => s.topic),
+    ...JS_MERGE_CHALLENGES.map((c) => c.topic),
+  ]);
+  for (const t of requiredTopics) {
+    assert.ok(allTopics.has(t), `Missing topic ${t}`);
+  }
+
+  const requiredModes = ['typing', 'complete', 'spot_bug', 'fix_code'];
+  const terminalModes = new Set(JS_SPEED_SNIPPETS.map((s) => s.mode));
+  for (const m of requiredModes) {
+    assert.ok(terminalModes.has(m), `Missing mode ${m}`);
+  }
+
+  // Todos possuem explicação técnica curta
+  assert.ok(JS_SPEED_SNIPPETS.every((s) => typeof s.explanation === 'string' && s.explanation.length > 10));
+  assert.ok(JS_MERGE_CHALLENGES.every((c) => typeof c.explanation === 'string' && c.explanation.length > 10));
+});
+
+test('equivalent JS answers are accepted without eval and non-repeating deck avoids duplicates', () => {
+  const mapChallenge = JS_MERGE_CHALLENGES.find((c) => c.id === 'bug-array-map');
+  assert.equal(isEquivalentJsAnswer('return scores.map((s) => s * 2)', mapChallenge), true);
+  assert.equal(isEquivalentJsAnswer('return scores.map(s => { return s * 2; });', mapChallenge), true);
+  assert.equal(isEquivalentJsAnswer('scores.forEach(s => s * 2)', mapChallenge), false);
+
+  const engine = new GameEngine();
+  engine.roomSettings.mode = 'avancada';
+  engine.startNewMatch([{ id: 'p0', name: 'Dev0', devClass: 'fullstack' }], false, { mode: 'avancada' });
+
+  // Limpa terminais iniciais e verifica que 20 spawns consecutivos não repetem desafios
+  engine.snapshot.terminals = [];
+  engine.usedTerminalIds.clear();
+  const seenTerminals = new Set();
+  for (let i = 0; i < 20; i++) {
+    engine.spawnCodeTerminal();
+    const last = engine.snapshot.terminals.pop();
+    assert.equal(seenTerminals.has(last.snippetId), false, `Duplicate terminal snippet ${last.snippetId}`);
+    seenTerminals.add(last.snippetId);
+  }
+
+  // Verifica que 20 Merge Conflicts consecutivos não repetem desafios
+  engine.usedMergeIds.clear();
+  const seenMerges = new Set();
+  for (let i = 0; i < 20; i++) {
+    engine.startMergeConflictEvent();
+    const cid = engine.snapshot.activeMerge.challengeId;
+    assert.equal(seenMerges.has(cid), false, `Duplicate merge challenge ${cid}`);
+    seenMerges.add(cid);
+    engine.finishMergeConflictEvent();
+  }
 });

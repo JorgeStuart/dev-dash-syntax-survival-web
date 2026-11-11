@@ -1,4 +1,10 @@
-import { JS_MERGE_CHALLENGES, JS_SPEED_SNIPPETS, normalizeCode } from '../coding/js_challenges.js';
+import {
+  ARENA_EFFECT_TYPES,
+  isEquivalentJsAnswer,
+  JS_MERGE_CHALLENGES,
+  JS_SPEED_SNIPPETS,
+  normalizeCode,
+} from '../coding/js_challenges.js';
 import {
   getBossStats,
   getBugStats,
@@ -51,6 +57,9 @@ export class GameEngine {
     this.terminalSpawnTimer = 4;
     this.mergeChallengeIdx = 0;
     this.orbitalAngle = 0;
+    this.usedTerminalIds = new Set();
+    this.usedMergeIds = new Set();
+    this.roomSettings = { mode: 'casual', botDifficulty: 'normal' };
     this.snapshot = this.createEmptySnapshot();
   }
 
@@ -59,24 +68,32 @@ export class GameEngine {
       sprintTimeRemaining: SPRINT_DURATION,
       nextMergeTimer: MERGE_INTERVAL,
       matchEnded: false,
+      roomSettings: { ...this.roomSettings },
       players: [],
       enemies: [],
       projectiles: [],
       gems: [],
       terminals: [],
       floatingTexts: [],
+      arenaEffects: [],
+      collectiveBoss: null,
       activeMerge: null,
       bannerMessage: null,
       bannerTimer: 0,
     };
   }
 
-  startNewMatch(lobbyPlayers, fillBots) {
+  startNewMatch(lobbyPlayers, fillBots, roomSettings = null) {
+    if (roomSettings) {
+      this.roomSettings = { ...this.roomSettings, ...roomSettings };
+    }
     this.snapshot = this.createEmptySnapshot();
     this.spawnTimer = 0;
     this.hackerTimer = 18;
     this.terminalSpawnTimer = 4;
     this.mergeChallengeIdx = 0;
+    this.usedTerminalIds.clear();
+    this.usedMergeIds.clear();
     this.inputs.clear();
     this.fireTimers.clear();
     this.lightningTimers.clear();
@@ -148,6 +165,15 @@ export class GameEngine {
       score: 0,
       kills: 0,
       deploysCompleted: 0,
+      challengesAttempted: 0,
+      challengesCorrect: 0,
+      collectiveContribution: 0,
+      lastExplanation: null,
+      activeBuffs: {
+        async_overclock: 0,
+        memory_gc: 0,
+        logic_firewall: 0,
+      },
       isCoding: false,
       codingType: 'none',
       terminalId: null,
@@ -212,6 +238,21 @@ export class GameEngine {
     return true;
   }
 
+  getBotTerminalDuration() {
+    const diff = this.roomSettings?.botDifficulty || 'normal';
+    if (diff === 'facil') {
+      const errDelay = Math.random() < 0.35 ? 2.2 : 0;
+      return 7.2 + errDelay;
+    }
+    if (diff === 'dificil') {
+      const errDelay = Math.random() < 0.05 ? 0.4 : 0;
+      return 3.0 + errDelay;
+    }
+    // normal: <= 4.8s para manter o ritmo padrão e compatibilidade com os testes
+    const errDelay = Math.random() < 0.15 ? 0.5 : 0;
+    return 4.2 + errDelay;
+  }
+
   setPlayerCoding(playerId, isCoding, terminalId = null) {
     const p = this.snapshot.players.find((pl) => pl.id === playerId);
     if (!p || p.respawnTimer > 0 || this.snapshot.matchEnded || this.snapshot.activeMerge) return false;
@@ -227,8 +268,113 @@ export class GameEngine {
     p.codingType = 'terminal';
     p.terminalId = term.id;
     p.terminalTimeRemaining = TERMINAL_DURATION;
-    if (p.isBot) this.botTerminalTimers.set(p.id, 4.8);
+    if (p.isBot) this.botTerminalTimers.set(p.id, this.getBotTerminalDuration());
     return true;
+  }
+
+  applyTerminalArenaEffect(p, effectType = 'filter_purge') {
+    if (!p.activeBuffs) {
+      p.activeBuffs = { async_overclock: 0, memory_gc: 0, logic_firewall: 0 };
+    }
+    const effectMeta = ARENA_EFFECT_TYPES[effectType] || ARENA_EFFECT_TYPES.filter_purge;
+
+    switch (effectMeta.id) {
+      case 'filter_purge': {
+        // Elimina até 4 bugs próximos na arena (ou causa alto dano a inimigos maiores)
+        const nearby = [...this.snapshot.enemies]
+          .filter((e) => e.hp > 0 && Math.hypot(e.x - p.x, e.y - p.y) <= 360)
+          .sort((a, b) => Math.hypot(a.x - p.x, a.y - p.y) - Math.hypot(b.x - p.x, b.y - p.y))
+          .slice(0, 4);
+
+        let purged = 0;
+        for (const e of nearby) {
+          if (e.kind === 'bug') {
+            this.damageEnemy(e, e.hp + 999, p);
+            purged += 1;
+          } else {
+            this.damageEnemy(e, 140 * p.damageMult, p);
+          }
+        }
+        this.snapshot.arenaEffects.push({
+          id: this.nextEntityId++,
+          type: 'filter_purge',
+          x: p.x,
+          y: p.y,
+          radius: 340,
+          color: '#00e5ff',
+          life: 0.65,
+          maxLife: 0.65,
+        });
+        this.addFloatingText(
+          p.x,
+          p.y - 52,
+          purged > 0 ? `💥 FILTER PURGE! ${purged} BUGS ELIMINADOS` : '💥 FILTER PURGE ATIVO!',
+          '#00e5ff'
+        );
+        break;
+      }
+      case 'async_overclock': {
+        // Acelera disparos temporariamente (+45% fireRate), com duração limitada a 14s
+        p.activeBuffs.async_overclock = Math.min(14, (p.activeBuffs.async_overclock || 0) + 10);
+        this.snapshot.arenaEffects.push({
+          id: this.nextEntityId++,
+          type: 'async_overclock',
+          x: p.x,
+          y: p.y,
+          radius: 150,
+          color: '#ffb020',
+          life: 0.55,
+          maxLife: 0.55,
+        });
+        this.addFloatingText(p.x, p.y - 52, '⚡ ASYNC OVERCLOCK! +45% CADÊNCIA (10s)', '#ffb020');
+        break;
+      }
+      case 'memory_gc': {
+        // Recupera vida adicional (+35 HP) e amplia raio de coleta de XP (+120px) por até 16s
+        p.hp = Math.min(p.maxHp, p.hp + 35);
+        p.activeBuffs.memory_gc = Math.min(16, (p.activeBuffs.memory_gc || 0) + 12);
+        this.snapshot.arenaEffects.push({
+          id: this.nextEntityId++,
+          type: 'memory_gc',
+          x: p.x,
+          y: p.y,
+          radius: 250,
+          color: '#33ff88',
+          life: 0.65,
+          maxLife: 0.65,
+        });
+        this.addFloatingText(p.x, p.y - 52, '🧲 GARBAGE COLLECTOR! +35 HP & ÍMÃ XP', '#33ff88');
+        break;
+      }
+      case 'logic_firewall':
+      default: {
+        // Pulso térmico imediato nos inimigos próximos + bônus temporário de +25% dano (teto 14s)
+        p.activeBuffs.logic_firewall = Math.min(14, (p.activeBuffs.logic_firewall || 0) + 10);
+        const nearby = [...this.snapshot.enemies].filter(
+          (e) => e.hp > 0 && Math.hypot(e.x - p.x, e.y - p.y) <= 230
+        );
+        for (const e of nearby) {
+          this.damageEnemy(e, 75 * p.damageMult, p);
+        }
+        this.snapshot.arenaEffects.push({
+          id: this.nextEntityId++,
+          type: 'logic_firewall',
+          x: p.x,
+          y: p.y,
+          radius: 230,
+          color: '#ff2d95',
+          life: 0.65,
+          maxLife: 0.65,
+        });
+        this.addFloatingText(p.x, p.y - 52, '🔥 LOGIC FIREWALL! PULSO & +25% DANO', '#ff2d95');
+        break;
+      }
+    }
+
+    // Se houver um Boss Coletivo ativo na arena, concluir um terminal também envia um pulso de código nele!
+    if (this.snapshot.collectiveBoss && this.snapshot.collectiveBoss.hp > 0) {
+      this.applyCodingStrikeToCollectiveBoss(p, 'terminal');
+    }
   }
 
   completeTerminal(playerId, terminalId, code) {
@@ -237,7 +383,19 @@ export class GameEngine {
         p.codingType !== 'terminal' || p.terminalId !== terminalId || p.terminalTimeRemaining <= 0) return false;
     const term = this.snapshot.terminals.find((t) => t.id === terminalId && t.active && t.lockedByPlayerId === playerId);
     const snippet = JS_SPEED_SNIPPETS.find((s) => s.id === term?.snippetId);
-    if (!snippet || (!p.isBot && code !== snippet.code)) return false;
+    if (!snippet) return false;
+    p.challengesAttempted = (p.challengesAttempted || 0) + 1;
+    if (!p.isBot && !isEquivalentJsAnswer(code, snippet)) return false;
+
+    p.challengesCorrect = (p.challengesCorrect || 0) + 1;
+    const effectMeta = ARENA_EFFECT_TYPES[snippet.effectType] || ARENA_EFFECT_TYPES.filter_purge;
+    p.lastExplanation = {
+      id: snippet.id,
+      title: `${snippet.topic.toUpperCase()} • ${snippet.difficulty.toUpperCase()} (${effectMeta.shortTag})`,
+      text: snippet.explanation,
+      code: snippet.code,
+    };
+
     this.releaseTerminal(p);
     this.snapshot.terminals = this.snapshot.terminals.filter((t) => t.id !== terminalId);
     p.deploysCompleted += 1;
@@ -247,6 +405,7 @@ export class GameEngine {
     p.score += commitsGain;
     p.hp = Math.min(p.maxHp, p.hp + 25);
     this.giveXp(p, xpGain);
+    this.applyTerminalArenaEffect(p, snippet.effectType);
     this.addFloatingText(p.x, p.y - 35, `💻 DEPLOY OK! +${commitsGain} COMMITS`, '#33ff88');
     return true;
   }
@@ -262,7 +421,17 @@ export class GameEngine {
     const p = this.snapshot.players.find((pl) => pl.id === playerId);
     if (!merge || !p || this.snapshot.matchEnded || merge.timeRemaining <= 0 || merge.completedOrder.includes(playerId)) return false;
     const challenge = JS_MERGE_CHALLENGES.find((c) => c.id === merge.challengeId);
-    if (!p.isBot && ![challenge.correctAnswer, ...challenge.acceptedAliases].some((a) => normalizeCode(a) === normalizeCode(answer))) return false;
+    if (!challenge) return false;
+    p.challengesAttempted = (p.challengesAttempted || 0) + 1;
+    if (!p.isBot && !isEquivalentJsAnswer(answer, challenge)) return false;
+
+    p.challengesCorrect = (p.challengesCorrect || 0) + 1;
+    p.lastExplanation = {
+      id: challenge.id,
+      title: challenge.title,
+      text: challenge.explanation,
+      code: challenge.correctAnswer,
+    };
 
     merge.completedOrder.push(playerId);
     const rank = merge.completedOrder.length;
@@ -275,6 +444,7 @@ export class GameEngine {
     const commits = rank === 1 ? 300 : 240;
     p.score += commits;
     this.giveXp(p, 130);
+    this.applyCodingStrikeToCollectiveBoss(p, 'merge');
     this.addFloatingText(p.x, p.y - 40, `✅ MERGE #${rank}! +${commits} COMMITS`, '#33ff88');
     if (rank === 1) {
       this.showBanner(`🏆 ${p.name} FEZ O 1º PUSH! +300 COMMITS. TODOS OS ACERTOS VALEM +240!`, 4);
@@ -380,14 +550,23 @@ export class GameEngine {
     // Atualiza Devs (Jogadores + Piloto Automático quando Codando + Bots)
     this.tickPlayers(dt);
 
-    // Atualiza Inimigos
+    // Atualiza Inimigos e Boss Coletivo
     this.tickEnemies(dt);
+    this.tickCollectiveBoss(dt);
 
     // Atualiza Projéteis
     this.tickProjectiles(dt);
 
     // Atualiza Cristais de XP
     this.tickGems(dt);
+
+    // Atualiza Efeitos Visuais de Arena
+    if (this.snapshot.arenaEffects) {
+      for (const ef of this.snapshot.arenaEffects) {
+        ef.life -= dt;
+      }
+      this.snapshot.arenaEffects = this.snapshot.arenaEffects.filter((ef) => ef.life > 0);
+    }
 
     // Textos flutuantes
     for (const ft of this.snapshot.floatingTexts) {
@@ -397,13 +576,31 @@ export class GameEngine {
     this.snapshot.floatingTexts = this.snapshot.floatingTexts.filter((f) => f.life > 0);
   }
 
-  startMergeConflictEvent() {
-    const challenge = JS_MERGE_CHALLENGES[this.mergeChallengeIdx % JS_MERGE_CHALLENGES.length];
+  pickUniqueMergeChallenge() {
+    const pool =
+      this.roomSettings?.mode === 'avancada'
+        ? JS_MERGE_CHALLENGES
+        : JS_MERGE_CHALLENGES;
+    let unused = pool.filter((c) => !this.usedMergeIds.has(c.id));
+    if (unused.length === 0) {
+      this.usedMergeIds.clear();
+      unused = [...pool];
+    }
+    const chosen =
+      this.mergeChallengeIdx === 0
+        ? unused[0]
+        : unused[Math.floor(Math.random() * unused.length)];
+    this.usedMergeIds.add(chosen.id);
     this.mergeChallengeIdx += 1;
+    return chosen;
+  }
+
+  startMergeConflictEvent() {
+    const challenge = this.pickUniqueMergeChallenge();
 
     this.snapshot.activeMerge = {
       challengeId: challenge.id,
-      timeRemaining: 24,
+      timeRemaining: this.roomSettings?.mode === 'casual' ? 26 : 24,
       completedOrder: [],
     };
     this.snapshot.nextMergeTimer = MERGE_INTERVAL;
@@ -416,7 +613,157 @@ export class GameEngine {
       p.mergeFinishedRank = 0;
     }
 
-    this.showBanner(`⚠️ MERGE CONFLICT DETECTADO: ${challenge.title}! CORRIJA O BUG JS!`, 5.0);
+    this.spawnOrRefreshCollectiveBoss();
+    this.showBanner(`⚠️ MERGE CONFLICT DETECTADO: ${challenge.title}! CORRIJA O BUG E ENFRAQUEÇA O MONÓLITO!`, 5.0);
+  }
+
+  spawnOrRefreshCollectiveBoss() {
+    const humans = this.snapshot.players.filter((p) => !p.isBot).length;
+    const bots = this.snapshot.players.filter((p) => p.isBot).length;
+    const avgLvl =
+      this.snapshot.players.reduce((acc, p) => acc + p.level, 0) /
+      Math.max(1, this.snapshot.players.length);
+    // Escala suavemente com número de jogadores humanos (peso 1.0) e bots (peso 0.55)
+    const teamScale = Math.max(1, humans * 1.0 + bots * 0.55);
+    const maxHp = Math.round((560 + avgLvl * 95) * teamScale);
+
+    this.snapshot.collectiveBoss = {
+      id: this.nextEntityId++,
+      name: 'MONÓLITO DE CONFLITO GIT',
+      x: 0,
+      y: -140,
+      vx: 0,
+      vy: 0,
+      hp: maxHp,
+      maxHp,
+      speed: 74,
+      scale: 2.35,
+      weakenStacks: 0,
+      codingStrikes: 0,
+      contributors: {},
+      rewardClaimed: false,
+      hitFlash: 0,
+      walkCycle: 0,
+    };
+  }
+
+  applyCodingStrikeToCollectiveBoss(p, source = 'merge') {
+    const boss = this.snapshot.collectiveBoss;
+    if (!boss || boss.hp <= 0) return;
+
+    boss.weakenStacks = Math.min(6, (boss.weakenStacks || 0) + 1);
+    boss.codingStrikes = (boss.codingStrikes || 0) + 1;
+    const pct = source === 'merge' ? 0.22 : 0.12;
+    const strikeDmg = Math.round(boss.maxHp * pct);
+    // Acertos de programação enfraquecem até 85% do HP máximo; o golpe final vem das armas na arena
+    const minRemainingHp = Math.max(1, Math.ceil(boss.maxHp * 0.15));
+    const prevHp = boss.hp;
+    boss.hp = Math.max(minRemainingHp, boss.hp - strikeDmg);
+    const actualReduced = Math.max(30, prevHp - boss.hp);
+    boss.hitFlash = 1.0;
+
+    const contribPoints = source === 'merge' ? 120 : 65;
+    p.collectiveContribution = (p.collectiveContribution || 0) + contribPoints;
+    boss.contributors[p.id] = (boss.contributors[p.id] || 0) + contribPoints;
+
+    this.addFloatingText(
+      boss.x,
+      boss.y - 48,
+      `⚡ PATCH DE ${p.name.toUpperCase()}! -${actualReduced} HP (VULNERÁVEL x${boss.weakenStacks})`,
+      '#00e5ff'
+    );
+  }
+
+  damageCollectiveBoss(dmg, attacker) {
+    const boss = this.snapshot.collectiveBoss;
+    if (!boss || boss.hp <= 0) return;
+
+    const vulnMult = 1 + (boss.weakenStacks || 0) * 0.2;
+    const finalDmg = dmg * vulnMult;
+    boss.hp = Math.max(0, boss.hp - finalDmg);
+    boss.hitFlash = 1.0;
+
+    if (attacker) {
+      const pts = Math.max(1, Math.round(finalDmg * 0.18));
+      attacker.collectiveContribution = (attacker.collectiveContribution || 0) + pts;
+      boss.contributors[attacker.id] = (boss.contributors[attacker.id] || 0) + pts;
+    }
+
+    if (boss.hp <= 0 && !boss.rewardClaimed) {
+      this.defeatCollectiveBoss();
+    }
+  }
+
+  defeatCollectiveBoss() {
+    const boss = this.snapshot.collectiveBoss;
+    if (!boss || boss.rewardClaimed) return;
+    boss.rewardClaimed = true;
+    boss.hp = 0;
+
+    for (const p of this.snapshot.players) {
+      const contrib = boss.contributors[p.id] || 0;
+      // Recompensa coletiva base para toda a equipe (+150 Commits, +90 XP, +30 HP)
+      // + Bônus proporcional de participação (+70 Commits) para quem contribuiu em código ou combate
+      const bonusCommits = 150 + (contrib > 0 ? 70 : 0);
+      p.score += bonusCommits;
+      p.hp = Math.min(p.maxHp, p.hp + 30);
+      this.giveXp(p, 90);
+      this.addFloatingText(p.x, p.y - 45, `🤝 BOSS COLETIVO DERROTADO! +${bonusCommits} COMMITS`, '#33ff88');
+    }
+
+    this.showBanner('🎉 MONÓLITO DE CONFLITO DERROTADO PELA EQUIPE! BÔNUS COLETIVO DISTRIBUÍDO!', 4.5);
+    this.snapshot.collectiveBoss = null;
+  }
+
+  tickCollectiveBoss(dt) {
+    const boss = this.snapshot.collectiveBoss;
+    if (!boss || boss.hp <= 0) return;
+
+    if (boss.hitFlash > 0) boss.hitFlash = Math.max(0, boss.hitFlash - dt * 5);
+
+    const alivePlayers = this.snapshot.players.filter((p) => p.respawnTimer <= 0);
+    if (alivePlayers.length === 0) return;
+
+    let target = null;
+    let minDist = Infinity;
+    for (const p of alivePlayers) {
+      const d = Math.hypot(p.x - boss.x, p.y - boss.y);
+      if (d < minDist) {
+        minDist = d;
+        target = p;
+      }
+    }
+
+    if (target) {
+      const dx = target.x - boss.x;
+      const dy = target.y - boss.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist > 1) {
+        boss.vx = (dx / dist) * boss.speed;
+        boss.vy = (dy / dist) * boss.speed;
+        boss.x += boss.vx * dt;
+        boss.y += boss.vy * dt;
+        boss.walkCycle += dt * 8;
+      }
+
+      for (const p of alivePlayers) {
+        const pDist = Math.hypot(p.x - boss.x, p.y - boss.y);
+        const hitRadius = 24 + 16 * boss.scale;
+        if (pDist < hitRadius) {
+          if (p.isCoding) {
+            if (pDist > 0.1) {
+              boss.x -= ((p.x - boss.x) / pDist) * 90 * dt;
+              boss.y -= ((p.y - boss.y) / pDist) * 90 * dt;
+            }
+          } else {
+            p.hp -= 24 * dt;
+            if (p.hp <= 0) {
+              this.handlePlayerDown(p);
+            }
+          }
+        }
+      }
+    }
   }
 
   finishMergeConflictEvent() {
@@ -436,12 +783,23 @@ export class GameEngine {
     const merge = this.snapshot.activeMerge;
     if (!merge) return;
 
+    const diff = this.roomSettings?.botDifficulty || 'normal';
+    const speedBase = diff === 'facil' ? 5.2 : diff === 'dificil' ? 11.2 : 7.8;
+
     for (const p of this.snapshot.players) {
       if (!p.isBot || merge.completedOrder.includes(p.id)) continue;
-      // Bots avançam entre 7% e 13% por segundo (levam ~9 a 14s para resolver)
-      const speed = 7.5 + (p.level % 4) * 1.5;
+      const speed = speedBase + (p.level % 4) * 1.4;
       p.mergeProgress = Math.min(100, p.mergeProgress + speed * dt);
       if (p.mergeProgress >= 100) {
+        // Chance de tropeço/erro do bot antes de acertar (Fácil: 28%, Normal: 12%, Difícil: 4%)
+        const errChance = diff === 'facil' ? 0.28 : diff === 'dificil' ? 0.04 : 0.12;
+        if (!p._mergeStumbled && Math.random() < errChance) {
+          p._mergeStumbled = true;
+          p.challengesAttempted = (p.challengesAttempted || 0) + 1;
+          p.mergeProgress = 68;
+          continue;
+        }
+        p._mergeStumbled = false;
         this.completeMergeChallenge(p.id);
       }
     }
@@ -450,6 +808,11 @@ export class GameEngine {
   tickPlayers(dt) {
     for (const p of this.snapshot.players) {
       p.terminalCooldownRemaining = Math.max(0, p.terminalCooldownRemaining - dt);
+      if (p.activeBuffs) {
+        for (const k of Object.keys(p.activeBuffs)) {
+          p.activeBuffs[k] = Math.max(0, (p.activeBuffs[k] || 0) - dt);
+        }
+      }
       if (p.codingType === 'terminal') {
         p.terminalTimeRemaining = Math.max(0, p.terminalTimeRemaining - dt);
         if (p.terminalTimeRemaining <= 0) {
@@ -601,8 +964,14 @@ export class GameEngine {
   }
 
   tickPlayerWeapons(p, dt) {
+    const overclockBonus = (p.activeBuffs?.async_overclock || 0) > 0 ? 1.45 : 1.0;
+    const firewallBuffDmg = (p.activeBuffs?.logic_firewall || 0) > 0 ? 1.25 : 1.0;
+    const effFireRate = p.fireRateMult * overclockBonus;
+    const effDamageMult = p.damageMult * firewallBuffDmg;
+    const cBoss = this.snapshot.collectiveBoss && this.snapshot.collectiveBoss.hp > 0 ? this.snapshot.collectiveBoss : null;
+
     // 1. Syntax Blaster (projéteis automáticos no inimigo mais próximo)
-    const fireCd = Math.max(0.2, 0.58 / p.fireRateMult);
+    const fireCd = Math.max(0.15, 0.58 / effFireRate);
     const curTimer = (this.fireTimers.get(p.id) || 0) - dt;
     if (curTimer <= 0) {
       const nearest = this.findNearestEnemy(p.x, p.y, 470);
@@ -621,7 +990,7 @@ export class GameEngine {
             y: p.y + Math.sin(ang) * 18,
             vx: Math.cos(ang) * 560,
             vy: Math.sin(ang) * 560,
-            damage: (24 + p.blasterLevel * 7) * p.damageMult,
+            damage: (24 + p.blasterLevel * 7) * effDamageMult,
             color: p.color,
             radius: 5,
             life: 1.15,
@@ -643,8 +1012,11 @@ export class GameEngine {
         const oy = p.y + Math.sin(ang) * orbRadius;
         for (const e of this.snapshot.enemies) {
           if (Math.hypot(e.x - ox, e.y - oy) < 22 * e.scale) {
-            this.damageEnemy(e, (45 + p.orbitalCount * 10) * p.damageMult * dt, p);
+            this.damageEnemy(e, (45 + p.orbitalCount * 10) * effDamageMult * dt, p);
           }
+        }
+        if (cBoss && Math.hypot(cBoss.x - ox, cBoss.y - oy) < 24 * cBoss.scale) {
+          this.damageCollectiveBoss((45 + p.orbitalCount * 10) * effDamageMult * dt, p);
         }
       }
     }
@@ -654,8 +1026,11 @@ export class GameEngine {
       const auraRadius = 85 + p.firewallLevel * 18;
       for (const e of this.snapshot.enemies) {
         if (Math.hypot(e.x - p.x, e.y - p.y) <= auraRadius) {
-          this.damageEnemy(e, (26 + p.firewallLevel * 12) * p.damageMult * dt, p);
+          this.damageEnemy(e, (26 + p.firewallLevel * 12) * effDamageMult * dt, p);
         }
+      }
+      if (cBoss && Math.hypot(cBoss.x - p.x, cBoss.y - p.y) <= auraRadius + 15) {
+        this.damageCollectiveBoss((26 + p.firewallLevel * 12) * effDamageMult * dt, p);
       }
     }
 
@@ -668,8 +1043,12 @@ export class GameEngine {
           .filter((e) => Math.hypot(e.x - p.x, e.y - p.y) < 340)
           .slice(0, 1 + p.lightningLevel);
         for (const t of targets) {
-          this.damageEnemy(t, (42 + p.lightningLevel * 18) * p.damageMult, p);
+          this.damageEnemy(t, (42 + p.lightningLevel * 18) * effDamageMult, p);
           this.addFloatingText(t.x, t.y - 20, '⚡ REGEX!', '#ffb020');
+        }
+        if (cBoss && Math.hypot(cBoss.x - p.x, cBoss.y - p.y) < 360) {
+          this.damageCollectiveBoss((42 + p.lightningLevel * 18) * effDamageMult, p);
+          this.addFloatingText(cBoss.x, cBoss.y - 30, '⚡ REGEX!', '#ffb020');
         }
       } else {
         this.lightningTimers.set(p.id, lTimer);
@@ -772,8 +1151,30 @@ export class GameEngine {
     });
   }
 
+  pickUniqueTerminalSnippet() {
+    const activeIds = new Set(this.snapshot.terminals.map((t) => t.snippetId));
+    const preferredPool =
+      this.roomSettings?.mode === 'casual'
+        ? JS_SPEED_SNIPPETS.filter((s) => s.difficulty !== 'avancado')
+        : JS_SPEED_SNIPPETS;
+
+    let candidates = preferredPool.filter((s) => !this.usedTerminalIds.has(s.id) && !activeIds.has(s.id));
+    if (candidates.length === 0) {
+      candidates = JS_SPEED_SNIPPETS.filter((s) => !this.usedTerminalIds.has(s.id) && !activeIds.has(s.id));
+    }
+    if (candidates.length === 0) {
+      this.usedTerminalIds.clear();
+      candidates = JS_SPEED_SNIPPETS.filter((s) => !activeIds.has(s.id));
+      if (candidates.length === 0) candidates = JS_SPEED_SNIPPETS;
+    }
+
+    const chosen = candidates[Math.floor(Math.random() * candidates.length)];
+    this.usedTerminalIds.add(chosen.id);
+    return chosen;
+  }
+
   spawnCodeTerminal() {
-    const snippet = JS_SPEED_SNIPPETS[Math.floor(Math.random() * JS_SPEED_SNIPPETS.length)];
+    const snippet = this.pickUniqueTerminalSnippet();
     const x = (Math.random() - 0.5) * (ARENA_HALF * 1.45);
     const y = (Math.random() - 0.5) * (ARENA_HALF * 1.45);
     this.snapshot.terminals.push({
@@ -781,6 +1182,10 @@ export class GameEngine {
       x,
       y,
       snippetId: snippet.id,
+      mode: snippet.mode || 'typing',
+      topic: snippet.topic || 'arrays',
+      difficulty: snippet.difficulty || 'iniciante',
+      effectType: snippet.effectType || 'filter_purge',
       active: true,
       lockedByPlayerId: null,
     });
@@ -854,12 +1259,27 @@ export class GameEngine {
   }
 
   tickProjectiles(dt) {
+    const cBoss =
+      this.snapshot.collectiveBoss && this.snapshot.collectiveBoss.hp > 0
+        ? this.snapshot.collectiveBoss
+        : null;
+
     for (const proj of this.snapshot.projectiles) {
       proj.x += proj.vx * dt;
       proj.y += proj.vy * dt;
       proj.life -= dt;
 
       if (proj.life <= 0) continue;
+
+      if (cBoss) {
+        const bDist = Math.hypot(cBoss.x - proj.x, cBoss.y - proj.y);
+        if (bDist < 22 * cBoss.scale + proj.radius) {
+          const owner = this.snapshot.players.find((p) => p.id === proj.ownerId);
+          this.damageCollectiveBoss(proj.damage, owner);
+          proj.life = 0;
+          continue;
+        }
+      }
 
       for (const e of this.snapshot.enemies) {
         if (e.hp <= 0) continue;
@@ -906,8 +1326,10 @@ export class GameEngine {
 
       for (const p of this.snapshot.players) {
         if (p.respawnTimer > 0) continue;
+        const gcBonus = (p.activeBuffs?.memory_gc || 0) > 0 ? 120 : 0;
+        const effMagnet = p.magnetRadius + gcBonus;
         const d = Math.hypot(p.x - g.x, p.y - g.y);
-        if (d < p.magnetRadius && d < minDist) {
+        if (d < effMagnet && d < minDist) {
           minDist = d;
           collector = p;
         }
@@ -951,6 +1373,14 @@ export class GameEngine {
       if (d < minDist) {
         minDist = d;
         best = e;
+      }
+    }
+    const cBoss = this.snapshot.collectiveBoss;
+    if (cBoss && cBoss.hp > 0) {
+      const bd = Math.hypot(cBoss.x - x, cBoss.y - y);
+      if (bd < minDist) {
+        minDist = bd;
+        best = cBoss;
       }
     }
     return best;

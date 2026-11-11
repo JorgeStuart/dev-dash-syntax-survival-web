@@ -1,8 +1,9 @@
 import { sfx } from './audio/synth.js';
 import {
+  ARENA_EFFECT_TYPES,
+  isEquivalentJsAnswer,
   JS_MERGE_CHALLENGES,
   JS_SPEED_SNIPPETS,
-  normalizeCode,
 } from './coding/js_challenges.js';
 import { GameEngine, UPGRADE_OPTIONS, TERMINAL_COOLDOWN, TERMINAL_RANGE } from './game/engine.js';
 import { drawDeveloperCharacter, GameRenderer } from './game/renderer.js';
@@ -14,11 +15,15 @@ const renderer = new GameRenderer(canvas);
 const engine = new GameEngine();
 const p2p = new P2PManager();
 
-// Elementos DOM — Lobby
+// Elementos DOM — Lobby & Tutorial
 const lobbyScreen = document.getElementById('lobby-screen');
+const btnOpenTutorial = document.getElementById('btn-open-tutorial');
+const tutorialModal = document.getElementById('tutorial-modal');
+const btnCloseTutorial = document.getElementById('btn-close-tutorial');
 const playerNameInput = document.getElementById('player-name-input');
 const classCards = document.querySelectorAll('.class-card');
 const colorSelectorEl = document.getElementById('color-selector');
+const connStateBadge = document.getElementById('conn-state-badge');
 const connectionStatus = document.getElementById('connection-status');
 const btnCreateRoom = document.getElementById('btn-create-room');
 const roomCodeInput = document.getElementById('room-code-input');
@@ -29,6 +34,8 @@ const btnCopyLink = document.getElementById('btn-copy-link');
 const lobbyPlayerCount = document.getElementById('lobby-player-count');
 const lobbyPlayersList = document.getElementById('lobby-players-list');
 const hostControls = document.getElementById('host-controls');
+const selRoomMode = document.getElementById('sel-room-mode');
+const selBotDifficulty = document.getElementById('sel-bot-difficulty');
 const clientWaitMsg = document.getElementById('client-wait-msg');
 const chkFillBots = document.getElementById('chk-fill-bots');
 const btnStartMatch = document.getElementById('btn-start-match');
@@ -41,21 +48,40 @@ const hudHpFill = document.getElementById('hud-hp-fill');
 const hudHpText = document.getElementById('hud-hp-text');
 const hudXpFill = document.getElementById('hud-xp-fill');
 const hudXpText = document.getElementById('hud-xp-text');
+const hudActiveBuffs = document.getElementById('hud-active-buffs');
 const hudShieldBadge = document.getElementById('hud-shield-badge');
 const hudTimer = document.getElementById('hud-timer');
 const hudMergeTimer = document.getElementById('hud-merge-timer');
+const collectiveBossHud = document.getElementById('collective-boss-hud');
+const collectiveBossTitle = document.getElementById('collective-boss-title');
+const collectiveBossVuln = document.getElementById('collective-boss-vuln');
+const collectiveBossFill = document.getElementById('collective-boss-fill');
+const collectiveBossHp = document.getElementById('collective-boss-hp');
 const hudRoomTag = document.getElementById('hud-room-tag');
 const hudLeaderboard = document.getElementById('hud-leaderboard');
 const eventBanner = document.getElementById('event-banner');
+const explanationToast = document.getElementById('explanation-toast');
+const explanationToastTitle = document.getElementById('explanation-toast-title');
+const explanationToastCode = document.getElementById('explanation-toast-code');
+const explanationToastText = document.getElementById('explanation-toast-text');
+const btnCloseExplanation = document.getElementById('btn-close-explanation');
 const upgradeDrawer = document.getElementById('upgrade-drawer');
 const upgradeCardsEl = document.getElementById('upgrade-cards');
 
-// Elementos DOM — Terminal Speed Typing Modal
+// Elementos DOM — Terminal Modal
 const terminalModal = document.getElementById('terminal-modal');
+const terminalModeBadge = document.getElementById('terminal-mode-badge');
+const terminalTopicBadge = document.getElementById('terminal-topic-badge');
+const terminalEffectBadge = document.getElementById('terminal-effect-badge');
+const terminalModalTitle = document.getElementById('terminal-modal-title');
 const terminalPromptDesc = document.getElementById('terminal-prompt-desc');
+const terminalContextCode = document.getElementById('terminal-context-code');
+const terminalOptionsEl = document.getElementById('terminal-options');
 const terminalProgressPct = document.getElementById('terminal-progress-pct');
 const terminalTargetCode = document.getElementById('terminal-target-code');
 const terminalHiddenInput = document.getElementById('terminal-hidden-input');
+const btnSubmitTerminal = document.getElementById('btn-submit-terminal');
+const terminalFeedback = document.getElementById('terminal-feedback');
 const btnCloseTerminal = document.getElementById('btn-close-terminal');
 
 // Elementos DOM — Merge Conflict Modal
@@ -94,6 +120,8 @@ let activeMergeChallengeId = null;
 let currentMergeChallenge = null;
 let mergePenaltyUntil = 0;
 let lastRenderedPendingUpgrades = 0;
+let lastShownExplanationKey = null;
+let explanationTimeoutId = null;
 
 // Inicializa seletor de cores neon
 function renderColorSwatches() {
@@ -227,16 +255,58 @@ playerNameInput.addEventListener('input', () => {
 
 syncLobbySelectionUI();
 
-// 2. Callbacks P2P
-p2p.onStatusChange = (status, isErr) => {
-  connectionStatus.textContent = status;
-  connectionStatus.style.color = isErr ? '#ff3344' : '#33ff88';
+// Modal de Tutorial / Como Jogar
+if (btnOpenTutorial && tutorialModal) {
+  btnOpenTutorial.addEventListener('click', () => {
+    sfx.keyHit();
+    tutorialModal.classList.remove('hidden');
+  });
+}
+if (btnCloseTutorial && tutorialModal) {
+  btnCloseTutorial.addEventListener('click', () => {
+    tutorialModal.classList.add('hidden');
+  });
+}
+
+// Controles de Modo da Sala e Dificuldade dos Bots (Host)
+if (selRoomMode) {
+  selRoomMode.addEventListener('change', () => {
+    p2p.updateRoomSettings({ mode: selRoomMode.value });
+  });
+}
+if (selBotDifficulty) {
+  selBotDifficulty.addEventListener('change', () => {
+    p2p.updateRoomSettings({ botDifficulty: selBotDifficulty.value });
+  });
+}
+
+const CONN_STATE_LABELS = {
+  desconectado: 'DESCONECTADO',
+  conectando: 'CONECTANDO...',
+  online: 'ONLINE (P2P)',
+  local: 'LOCAL (ABAS)',
 };
 
-p2p.onLobbyChange = (players, roomCode) => {
+// 2. Callbacks P2P
+p2p.onStatusChange = (status, isErr, state = p2p.connectionState) => {
+  connectionStatus.textContent = status;
+  connectionStatus.style.color = isErr ? '#ff3344' : '#33ff88';
+  if (connStateBadge) {
+    const cleanState = state || 'desconectado';
+    connStateBadge.className = `conn-state-badge state-${cleanState}`;
+    connStateBadge.textContent = CONN_STATE_LABELS[cleanState] || cleanState.toUpperCase();
+  }
+};
+
+p2p.onLobbyChange = (players, roomCode, roomSettings = p2p.roomSettings) => {
   roomLobbyBox.classList.remove('hidden');
   activeRoomCodeEl.textContent = roomCode;
   lobbyPlayerCount.textContent = String(players.length);
+
+  if (roomSettings) {
+    if (selRoomMode && roomSettings.mode) selRoomMode.value = roomSettings.mode;
+    if (selBotDifficulty && roomSettings.botDifficulty) selBotDifficulty.value = roomSettings.botDifficulty;
+  }
 
   // Sincroniza o bonequinho e a cor atribuídos a mim pelo Host (evita duplicatas!)
   const meInLobby = players.find((p) => p.id === p2p.myId);
@@ -266,6 +336,14 @@ p2p.onLobbyChange = (players, roomCode) => {
   } else {
     hostControls.classList.add('hidden');
     clientWaitMsg.classList.remove('hidden');
+    const modeLabel = roomSettings?.mode === 'avancada' ? 'Avançada' : 'Casual';
+    const diffLabel =
+      roomSettings?.botDifficulty === 'facil'
+        ? 'Fácil'
+        : roomSettings?.botDifficulty === 'dificil'
+        ? 'Difícil'
+        : 'Normal';
+    clientWaitMsg.textContent = `Aguardando o Host iniciar a Sprint... (Modo: ${modeLabel} • Bots: ${diffLabel})`;
   }
 };
 
@@ -302,7 +380,7 @@ p2p.onClientMessage = (playerId, msg) => {
       break;
     case 'request_rematch':
       if (currentSnapshot.matchEnded) {
-        engine.startNewMatch(p2p.lobbyPlayers, chkFillBots.checked);
+        engine.startNewMatch(p2p.lobbyPlayers, chkFillBots.checked, p2p.roomSettings);
         currentSnapshot = engine.snapshot;
         p2p.broadcastMatchStart(currentSnapshot);
         enterMatchUI();
@@ -323,6 +401,12 @@ p2p.onSnapshotReceived = (snapshot) => {
 // Botões de Sala
 btnCreateRoom.addEventListener('click', async () => {
   const name = playerNameInput.value.trim() || 'Dev_Master';
+  if (selRoomMode && selBotDifficulty) {
+    p2p.roomSettings = {
+      mode: selRoomMode.value || 'casual',
+      botDifficulty: selBotDifficulty.value || 'normal',
+    };
+  }
   await p2p.createRoom(name, selectedClass, selectedColor);
 });
 
@@ -348,7 +432,13 @@ btnCopyLink.addEventListener('click', () => {
 
 btnStartMatch.addEventListener('click', () => {
   if (!p2p.isHost) return;
-  engine.startNewMatch(p2p.lobbyPlayers, chkFillBots.checked);
+  if (selRoomMode && selBotDifficulty) {
+    p2p.updateRoomSettings({
+      mode: selRoomMode.value || 'casual',
+      botDifficulty: selBotDifficulty.value || 'normal',
+    });
+  }
+  engine.startNewMatch(p2p.lobbyPlayers, chkFillBots.checked, p2p.roomSettings);
   currentSnapshot = engine.snapshot;
   p2p.broadcastMatchStart(currentSnapshot);
   enterMatchUI();
@@ -359,7 +449,11 @@ function enterMatchUI() {
   activeTerminalId = null;
   activeSnippet = null;
   terminalCooldownUntil = 0;
+  lastShownExplanationKey = null;
+  if (explanationTimeoutId) clearTimeout(explanationTimeoutId);
+  if (explanationToast) explanationToast.classList.add('hidden');
   keysDown.clear();
+  if (tutorialModal) tutorialModal.classList.add('hidden');
   terminalModal.classList.add('hidden');
   mergeModal.classList.add('hidden');
   activeMergeChallengeId = null;
@@ -372,6 +466,11 @@ function enterMatchUI() {
 
 // 3. Inputs de Movimento e Atalhos
 window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && tutorialModal && !tutorialModal.classList.contains('hidden')) {
+    tutorialModal.classList.add('hidden');
+    return;
+  }
+
   if (!isPlaying) return;
 
   if (e.key === 'Escape' && activeTerminalId !== null) {
@@ -437,6 +536,13 @@ function checkTerminalProximity(meX, meY, terminals, interact = false) {
   }
 }
 
+const TERMINAL_MODE_LABELS = {
+  typing: { badge: '💻 DIGITAÇÃO JS', title: 'TERMINAL DE DIGITAÇÃO RÁPIDA' },
+  complete: { badge: '🧩 COMPLETAR EXPRESSÃO', title: 'COMPLETE A EXPRESSÃO JAVASCRIPT' },
+  spot_bug: { badge: '🔍 IDENTIFICAR BUG', title: 'IDENTIFIQUE A CORREÇÃO DO BUG' },
+  fix_code: { badge: '🛠️ CORRIGIR TRECHO', title: 'CORRIJA O TRECHO DE CÓDIGO JS' },
+};
+
 function openTerminalModal(term) {
   document.getElementById('terminal-focus-timer').textContent = '🛡️ RESERVANDO TERMINAL...';
   terminalRequestedAt = performance.now();
@@ -444,14 +550,80 @@ function openTerminalModal(term) {
   activeTerminalId = term.id;
   activeSnippet = JS_SPEED_SNIPPETS.find((s) => s.id === term.snippetId) ?? JS_SPEED_SNIPPETS[0];
 
+  const modeMeta = TERMINAL_MODE_LABELS[activeSnippet.mode] || TERMINAL_MODE_LABELS.typing;
+  const effectMeta = ARENA_EFFECT_TYPES[activeSnippet.effectType] || ARENA_EFFECT_TYPES.filter_purge;
+
+  if (terminalModeBadge) terminalModeBadge.textContent = modeMeta.badge;
+  if (terminalTopicBadge) {
+    terminalTopicBadge.textContent = `${(activeSnippet.topic || 'js').toUpperCase()} • ${(activeSnippet.difficulty || 'iniciante').toUpperCase()}`;
+  }
+  if (terminalEffectBadge) {
+    terminalEffectBadge.textContent = effectMeta.label;
+    terminalEffectBadge.style.borderColor = effectMeta.color;
+    terminalEffectBadge.style.color = effectMeta.color;
+  }
+  if (terminalModalTitle) terminalModalTitle.textContent = modeMeta.title;
+
   const bonus = currentSnapshot.players.find((p) => p.id === p2p.myId)?.devClass === 'secops' ? 1.25 : 1;
-  terminalPromptDesc.innerHTML = `${activeSnippet.desc} <strong style="color:#33ff88">(+${Math.round(activeSnippet.commitsReward * bonus)} Commits & +${Math.round(activeSnippet.xpReward * bonus)} XP)</strong>`;
+  terminalPromptDesc.innerHTML = `${escapeHtml(activeSnippet.desc)} <strong style="color:#33ff88">(+${Math.round(activeSnippet.commitsReward * bonus)} Commits & +${Math.round(activeSnippet.xpReward * bonus)} XP)</strong>`;
+
+  if (terminalContextCode) {
+    if (activeSnippet.promptCode) {
+      terminalContextCode.textContent = activeSnippet.promptCode;
+      terminalContextCode.classList.remove('hidden');
+    } else {
+      terminalContextCode.textContent = '';
+      terminalContextCode.classList.add('hidden');
+    }
+  }
+
+  if (terminalOptionsEl) {
+    if (Array.isArray(activeSnippet.options) && activeSnippet.options.length > 0) {
+      const shuffled = [...activeSnippet.options].sort(() => Math.random() - 0.5);
+      terminalOptionsEl.innerHTML = shuffled
+        .map(
+          (opt) =>
+            `<button type="button" class="merge-opt-btn" data-ans="${escapeHtml(opt)}"><code>${escapeHtml(opt)}</code></button>`
+        )
+        .join('');
+      terminalOptionsEl.classList.remove('hidden');
+      terminalOptionsEl.querySelectorAll('.merge-opt-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          submitTerminalAttempt(btn.dataset.ans || '');
+        });
+      });
+    } else {
+      terminalOptionsEl.innerHTML = '';
+      terminalOptionsEl.classList.add('hidden');
+    }
+  }
+
+  if (terminalFeedback) terminalFeedback.textContent = '';
   terminalHiddenInput.value = '';
   renderSnippetHighlight('');
   terminalModal.classList.remove('hidden');
   setTimeout(() => terminalHiddenInput.focus(), 20);
 
   p2p.sendToHost({ type: 'start_coding', terminalId: term.id });
+}
+
+function submitTerminalAttempt(candidate) {
+  if (!activeSnippet || activeTerminalId === null) return;
+  if (isEquivalentJsAnswer(candidate, activeSnippet)) {
+    const completedId = activeTerminalId;
+    activeTerminalId = null;
+    activeSnippet = null;
+    terminalCooldownUntil = performance.now() + TERMINAL_COOLDOWN * 1000;
+    terminalModal.classList.add('hidden');
+    sfx.terminalSuccess();
+    p2p.sendToHost({ type: 'complete_terminal', terminalId: completedId, code: candidate });
+  } else {
+    sfx.keyError();
+    if (terminalFeedback) {
+      terminalFeedback.style.color = '#ff3344';
+      terminalFeedback.textContent = '❌ Resposta incorreta! Revise a sintaxe ou escolha outra opção.';
+    }
+  }
 }
 
 function renderSnippetHighlight(typed) {
@@ -495,18 +667,26 @@ terminalHiddenInput.addEventListener('input', () => {
     }
   }
 
+  if (terminalFeedback) terminalFeedback.textContent = '';
   renderSnippetHighlight(typed);
 
   if (typed === target) {
-    const completedId = activeTerminalId;
-    activeTerminalId = null;
-    activeSnippet = null;
-    terminalCooldownUntil = performance.now() + TERMINAL_COOLDOWN * 1000;
-    terminalModal.classList.add('hidden');
-    sfx.terminalSuccess();
-    p2p.sendToHost({ type: 'complete_terminal', terminalId: completedId, code: typed });
+    submitTerminalAttempt(typed);
   }
 });
+
+terminalHiddenInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    submitTerminalAttempt(terminalHiddenInput.value);
+  }
+});
+
+if (btnSubmitTerminal) {
+  btnSubmitTerminal.addEventListener('click', () => {
+    submitTerminalAttempt(terminalHiddenInput.value);
+  });
+}
 
 function closeTerminalModal() {
   activeTerminalId = null;
@@ -596,10 +776,7 @@ function attemptMergeFix(candidate) {
   if (!currentMergeChallenge) return;
   if (performance.now() < mergePenaltyUntil) return;
 
-  const normCandidate = normalizeCode(candidate);
-  const isCorrect =
-    normCandidate === normalizeCode(currentMergeChallenge.correctAnswer) ||
-    currentMergeChallenge.acceptedAliases.some((a) => normalizeCode(a) === normCandidate);
+  const isCorrect = isEquivalentJsAnswer(candidate, currentMergeChallenge);
 
   if (isCorrect) {
     sfx.terminalSuccess();
@@ -653,6 +830,28 @@ function updateHUD() {
   hudXpFill.style.width = `${xpPct}%`;
   hudXpText.textContent = `${Math.floor(me.xp)} / ${nextThreshold} XP`;
 
+  // Pílulas de Buffs Temporários de Código JS ativos no Dev
+  if (hudActiveBuffs) {
+    const buffPills = [];
+    const buffs = me.activeBuffs || {};
+    if ((buffs.async_overclock || 0) > 0) {
+      buffPills.push(
+        `<span class="buff-pill" style="border-color:#ffb020;color:#ffb020">⚡ OVERCLOCK ${Math.ceil(buffs.async_overclock)}s</span>`
+      );
+    }
+    if ((buffs.memory_gc || 0) > 0) {
+      buffPills.push(
+        `<span class="buff-pill" style="border-color:#33ff88;color:#33ff88">🧲 GC ÍMÃ ${Math.ceil(buffs.memory_gc)}s</span>`
+      );
+    }
+    if ((buffs.logic_firewall || 0) > 0) {
+      buffPills.push(
+        `<span class="buff-pill" style="border-color:#ff2d95;color:#ff2d95">🔥 +25% DANO ${Math.ceil(buffs.logic_firewall)}s</span>`
+      );
+    }
+    hudActiveBuffs.innerHTML = buffPills.join('');
+  }
+
   if (me.isCoding) {
     hudShieldBadge.classList.remove('hidden');
     hudShieldBadge.textContent = me.codingType === 'terminal'
@@ -666,6 +865,50 @@ function updateHUD() {
   hudMergeTimer.textContent = currentSnapshot.activeMerge
     ? 'EM ANDAMENTO!'
     : formatSeconds(currentSnapshot.nextMergeTimer);
+
+  // Barra compartilhada do Monólito Coletivo de Merge
+  const cBoss = currentSnapshot.collectiveBoss;
+  if (collectiveBossHud) {
+    if (cBoss && cBoss.hp > 0) {
+      collectiveBossHud.classList.remove('hidden');
+      if (collectiveBossTitle) collectiveBossTitle.textContent = `👾 ${cBoss.name}`;
+      if (collectiveBossVuln) {
+        const stacks = cBoss.weakenStacks || 0;
+        collectiveBossVuln.textContent = `VULN x${stacks} (+${stacks * 20}% DANO)`;
+      }
+      if (collectiveBossFill) {
+        const bossPct = Math.max(0, Math.min(100, (cBoss.hp / cBoss.maxHp) * 100));
+        collectiveBossFill.style.width = `${bossPct}%`;
+      }
+      if (collectiveBossHp) {
+        collectiveBossHp.textContent = `${Math.ceil(cBoss.hp)} / ${cBoss.maxHp} HP`;
+      }
+    } else {
+      collectiveBossHud.classList.add('hidden');
+    }
+  }
+
+  // Toast não-bloqueante de explicação técnica ao concluir desafios JS
+  if (me.lastExplanation && explanationToast) {
+    const expKey = `${me.lastExplanation.id}:${me.deploysCompleted}`;
+    if (expKey !== lastShownExplanationKey) {
+      lastShownExplanationKey = expKey;
+      if (explanationToastTitle) {
+        explanationToastTitle.textContent = `💡 ${me.lastExplanation.title}`;
+      }
+      if (explanationToastCode) {
+        explanationToastCode.textContent = me.lastExplanation.code || '';
+      }
+      if (explanationToastText) {
+        explanationToastText.textContent = me.lastExplanation.text || '';
+      }
+      explanationToast.classList.remove('hidden');
+      if (explanationTimeoutId) clearTimeout(explanationTimeoutId);
+      explanationTimeoutId = setTimeout(() => {
+        explanationToast.classList.add('hidden');
+      }, 9500);
+    }
+  }
 
   // Ranking ao vivo ordenado por Score (Commits)
   const sorted = [...currentSnapshot.players].sort((a, b) => b.score - a.score);
@@ -720,6 +963,12 @@ function updateHUD() {
   }
 }
 
+if (btnCloseExplanation && explanationToast) {
+  btnCloseExplanation.addEventListener('click', () => {
+    explanationToast.classList.add('hidden');
+  });
+}
+
 function renderUpgradeChoices() {
   const picks = [...UPGRADE_OPTIONS].sort(() => Math.random() - 0.5).slice(0, 3);
   upgradeCardsEl.innerHTML = picks
@@ -754,23 +1003,30 @@ function showPodium(sortedPlayers) {
     : 'Sprint encerrada!';
 
   podiumTbody.innerHTML = sortedPlayers
-    .map(
-      (p, i) => `
+    .map((p, i) => {
+      const attempted = p.challengesAttempted || 0;
+      const correct = p.challengesCorrect || 0;
+      const accPct = attempted > 0 ? Math.round((correct / attempted) * 100) : 100;
+      const accLabel = attempted > 0 ? `${accPct}% (${correct}/${attempted})` : '—';
+      const contrib = p.collectiveContribution || 0;
+      return `
       <tr>
         <td><strong>#${i + 1}</strong></td>
         <td style="color:${p.color}; font-weight:800">${escapeHtml(p.name)}</td>
         <td>LVL ${p.level}</td>
-        <td>${p.kills}</td>
+        <td>${accLabel}</td>
         <td>${p.deploysCompleted} deploys</td>
+        <td>${p.kills}</td>
+        <td style="color:#00e5ff">${contrib} pts</td>
         <td><strong style="color:#33ff88">${p.score}</strong></td>
-      </tr>`
-    )
+      </tr>`;
+    })
     .join('');
 }
 
 btnPlayAgain.addEventListener('click', () => {
   if (p2p.isHost) {
-    engine.startNewMatch(p2p.lobbyPlayers, chkFillBots.checked);
+    engine.startNewMatch(p2p.lobbyPlayers, chkFillBots.checked, p2p.roomSettings);
     currentSnapshot = engine.snapshot;
     p2p.broadcastMatchStart(currentSnapshot);
     enterMatchUI();

@@ -25,10 +25,15 @@
     <!-- LOBBY OVERLAY -->
     <div id="lobby-screen" class="overlay active">
       <div class="cyber-panel lobby-panel">
-        <div class="badge-tag">WEB MULTIPLAYER P2P // ZERO SERVER COST</div>
+        <div class="top-bar-row">
+          <div class="badge-tag">WEB MULTIPLAYER P2P // ZERO SERVER COST</div>
+          <button id="btn-open-tutorial" type="button" class="cyber-btn small secondary">
+            📖 COMO JOGAR / TUTORIAL
+          </button>
+        </div>
         <h1 class="game-title">DEV DASH<span>: SYNTAX SURVIVAL</span></h1>
         <p class="subtitle">
-          Sobreviva no mesmo Data Center com seus amigos, dispute XP e faça Deploy de código JavaScript para dominar a Sprint!
+          Sobreviva no mesmo Data Center com seus amigos, resolva desafios de JavaScript que transformam a arena e derrote o Monólito de Merge em equipe!
         </p>
 
         <div class="lobby-grid">
@@ -93,7 +98,10 @@
           </div>
 
           <div class="lobby-col room-col">
-            <div id="connection-status" class="status-pill">Pronto para conectar (PeerJS WebRTC)</div>
+            <div class="conn-status-row">
+              <span id="conn-state-badge" class="conn-state-badge state-desconectado">DESCONECTADO</span>
+              <div id="connection-status" class="status-pill">Pronto para conectar (PeerJS / Canal Local)</div>
+            </div>
 
             <div class="room-actions">
               <button id="btn-create-room" class="cyber-btn primary">
@@ -127,6 +135,23 @@
               <ul id="lobby-players-list" class="lobby-players-list"></ul>
 
               <div id="host-controls" class="host-controls">
+                <div class="room-settings-grid">
+                  <div>
+                    <label class="small-label" for="sel-room-mode">MODO DA SALA</label>
+                    <select id="sel-room-mode" class="cyber-select">
+                      <option value="casual">Casual (Progressivo + 26s Merge)</option>
+                      <option value="avancada">Avançada (Todos os Níveis + 24s)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="small-label" for="sel-bot-difficulty">DIFICULDADE DOS BOTS</label>
+                    <select id="sel-bot-difficulty" class="cyber-select">
+                      <option value="facil">Fácil (Mais lentos / 28% erro)</option>
+                      <option value="normal" selected>Normal (Equilibrados / 12% erro)</option>
+                      <option value="dificil">Difícil (Rápidos / 4% erro)</option>
+                    </select>
+                  </div>
+                </div>
                 <label class="bot-toggle">
                   <input type="checkbox" id="chk-fill-bots" checked />
                   <span>Adicionar Devs Bots competitivos (ótimo p/ testar ou completar sala)</span>
@@ -144,9 +169,40 @@
 
         <div class="how-to-play-bar">
           <div><strong>WASD / Setas:</strong> Mover pela Arena</div>
-          <div><strong>Terminais Verdes:</strong> Veja a recompensa e aperte E para codar (recarga de 6s)</div>
-          <div><strong>Sirene Merge Conflict:</strong> Fix the Bug JS PvP (+300 commits ao 1º, +240 aos demais acertos)</div>
-          <div><strong>🛡️ Escudo de Foco:</strong> Piloto Automático sem dano por até <strong>18s no terminal</strong>. Aviso nos últimos 5s; ESC para sair!</div>
+          <div><strong>Terminais JS [E]:</strong> Veja modalidade e efeito na arena antes de entrar (recarga 6s)</div>
+          <div><strong>Evento Coletivo + Merge:</strong> Acertos dão +300/+240 Commits e enfraquecem o Monólito Coletivo!</div>
+          <div><strong>🛡️ Escudo de Foco:</strong> Piloto Automático sem dano por até <strong>18s no terminal</strong> (aviso nos últimos 5s; ESC sai)</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL OPCIONAL DE TUTORIAL / COMO JOGAR -->
+    <div id="tutorial-modal" class="code-modal-backdrop hidden">
+      <div class="cyber-panel code-modal">
+        <div class="modal-header">
+          <div>
+            <span class="modal-badge green">📖 GUIA RÁPIDO DA SPRINT</span>
+            <h3>COMO SOBREVIVER E PROGRAMAR NA ARENA</h3>
+          </div>
+          <button id="btn-close-tutorial" type="button" class="cyber-btn small secondary">FECHAR [ESC]</button>
+        </div>
+        <div class="tutorial-grid">
+          <div class="tutorial-card">
+            <strong>1. Movimento & Combate Automático</strong>
+            <p>Use <code>WASD</code> ou as Setas para circular pelo Data Center. Suas armas (Syntax Blaster, Orbitals, Firewall e Regex Lightning) atacam automaticamente os Bugs e Hackers mais próximos.</p>
+          </div>
+          <div class="tutorial-card">
+            <strong>2. Terminais JS & Efeitos na Arena</strong>
+            <p>Aproxime-se de um terminal e veja <strong>antes de entrar</strong> a recompensa e o efeito temático (<em>Purge de Bugs</em>, <em>Overclock Assíncrono</em>, <em>Garbage Collector</em> ou <em>Logic Firewall</em>). Aperte <code>E</code> para entrar. Há 4 modalidades: Digitação, Completar Expressão, Identificar Bug e Corrigir Trecho.</p>
+          </div>
+          <div class="tutorial-card">
+            <strong>3. Escudo de Foco (18s) & Recarga (6s)</strong>
+            <p>Enquanto resolve um terminal, o <strong>Piloto Automático</strong> assume por até <strong>18 segundos</strong> com imunidade a dano (aviso nos últimos 5s). Ao concluir ou apertar <code>ESC</code>, há uma recarga de <strong>6 segundos</strong> antes do próximo terminal.</p>
+          </div>
+          <div class="tutorial-card">
+            <strong>4. Merge Conflict & Monólito Coletivo</strong>
+            <p>Na sirene de Merge, todos ficam protegidos: o 1º acerto ganha <strong>+300 Commits</strong> e os demais <strong>+240 Commits</strong> (+130 XP para todos, sem punição ao último). Cada acerto de código golpeia e aplica vulnerabilidade ao <strong>Monólito de Conflito Git</strong> na arena para a equipe derrotá-lo junta!</p>
+          </div>
         </div>
       </div>
     </div>
@@ -168,18 +224,30 @@
             <div id="hud-xp-fill" class="bar-fill xp-fill" style="width: 0%"></div>
             <span id="hud-xp-text" class="bar-label">0 / 110 XP</span>
           </div>
+          <div id="hud-active-buffs" class="active-buffs-row"></div>
           <div id="hud-shield-badge" class="shield-badge hidden">
             🛡️ ESCUDO DE FOCO ATIVO (PILOTO AUTOMÁTICO • ZERO DANO)
           </div>
         </div>
 
-        <!-- Sprint Timer & Merge Conflict Alert -->
+        <!-- Sprint Timer, Merge Conflict Alert & Shared Boss Bar -->
         <div class="hud-box center-hud">
           <div class="sprint-label">SPRINT TIMER</div>
           <div id="hud-timer" class="sprint-timer">05:00</div>
           <div class="merge-countdown-wrap">
             <span>Próximo Merge Conflict PvP:</span>
             <strong id="hud-merge-timer">01:15</strong>
+          </div>
+          <div id="collective-boss-hud" class="collective-boss-hud hidden">
+            <div class="boss-hud-top">
+              <span id="collective-boss-title">👾 MONÓLITO DE CONFLITO GIT</span>
+              <span id="collective-boss-vuln" class="boss-vuln-tag">VULN x0</span>
+            </div>
+            <div class="bar-container boss-bar">
+              <div id="collective-boss-fill" class="bar-fill boss-fill" style="width: 100%"></div>
+              <span id="collective-boss-hp" class="bar-label">600 / 600 HP</span>
+            </div>
+            <div class="boss-hud-hint">Desafios JS tiram HP e aumentam o dano da equipe contra o Monólito!</div>
           </div>
         </div>
 
@@ -196,6 +264,16 @@
       <!-- Event Banner -->
       <div id="event-banner" class="event-banner hidden"></div>
 
+      <!-- Non-blocking Explanation Toast after completing a challenge -->
+      <div id="explanation-toast" class="explanation-toast hidden">
+        <div class="explanation-toast-header">
+          <strong id="explanation-toast-title">💡 EXPLICAÇÃO DO PATCH</strong>
+          <button id="btn-close-explanation" type="button" class="toast-close-btn">×</button>
+        </div>
+        <div id="explanation-toast-code" class="explanation-toast-code"></div>
+        <p id="explanation-toast-text"></p>
+      </div>
+
       <!-- Quick Level-Up Cards (Non-blocking bottom bar) -->
       <div id="upgrade-drawer" class="upgrade-drawer hidden">
         <div class="upgrade-title">⚡ LEVEL UP! ESCOLHA UM UPGRADE (Teclas [1] [2] [3] ou Clique):</div>
@@ -203,40 +281,53 @@
       </div>
     </div>
 
-    <!-- MODAL 1: TERMINAL SPEED TYPING (MAP TERMINALS) -->
+    <!-- MODAL 1: TERMINAL DE DESAFIOS JS (4 MODALIDADES + EFEITO NA ARENA) -->
     <div id="terminal-modal" class="code-modal-backdrop hidden">
       <div class="cyber-panel code-modal terminal-theme">
         <div class="modal-header">
           <div>
-            <span class="modal-badge green">💻 TERMINAL DE DEPLOY RÁPIDO</span>
-            <h3>SPEED TYPING JAVASCRIPT</h3>
+            <div class="terminal-badges-row">
+              <span id="terminal-mode-badge" class="modal-badge green">💻 DIGITAÇÃO JS</span>
+              <span id="terminal-topic-badge" class="modal-badge cyan">ARRAYS • INICIANTE</span>
+              <span id="terminal-effect-badge" class="modal-badge amber">💥 EFEITO NA ARENA</span>
+            </div>
+            <h3 id="terminal-modal-title">TERMINAL DE DEPLOY</h3>
           </div>
           <div id="terminal-focus-timer" class="shield-pill">🛡️ FOCO POR ATÉ 18s • ESC PARA SAIR</div>
         </div>
 
-        <p class="modal-desc" id="terminal-prompt-desc">
-          Digite o snippet JavaScript abaixo exatamente como exibido para injetar o patch e ganhar <strong>+180 Commits & XP Bônus</strong>!
-        </p>
+        <p class="modal-desc" id="terminal-prompt-desc"></p>
+
+        <pre id="terminal-context-code" class="buggy-code-block hidden"></pre>
+
+        <div id="terminal-options" class="merge-options-grid hidden"></div>
 
         <div class="code-editor-box">
           <div class="editor-statusbar">
-            <span>patch_hotfix.js</span>
+            <span id="terminal-editor-filename">patch_hotfix.js</span>
             <span id="terminal-progress-pct">0%</span>
           </div>
           <div id="terminal-target-code" class="target-code-display"></div>
-          <input
-            id="terminal-hidden-input"
-            type="text"
-            class="code-live-input"
-            placeholder="Digite o código aqui..."
-            autocomplete="off"
-            autocapitalize="off"
-            spellcheck="false"
-          />
+          <div class="terminal-input-row">
+            <input
+              id="terminal-hidden-input"
+              type="text"
+              class="code-live-input"
+              placeholder="Digite a solução JavaScript aqui (ou pressione Enter)..."
+              autocomplete="off"
+              autocapitalize="off"
+              spellcheck="false"
+            />
+            <button id="btn-submit-terminal" type="button" class="cyber-btn small primary">
+              CONFIRMAR [ENTER]
+            </button>
+          </div>
         </div>
 
+        <div id="terminal-feedback" class="merge-feedback"></div>
+
         <div class="modal-footer">
-          <span class="hint-text">Dica: Digite com precisão! Erros piscam em vermelho.</span>
+          <span class="hint-text">Dica: Em exercícios de correção, soluções JS equivalentes também são aceitas!</span>
           <button id="btn-close-terminal" class="cyber-btn small danger">[ESC] Sair do Terminal</button>
         </div>
       </div>
@@ -247,14 +338,14 @@
       <div class="cyber-panel code-modal merge-theme">
         <div class="modal-header">
           <div>
-            <span class="modal-badge red">⚠️ SIRENE GLOBAL: MERGE CONFLICT PVP</span>
+            <span class="modal-badge red">⚠️ SIRENE GLOBAL: MERGE CONFLICT & BOSS COLETIVO</span>
             <h3 id="merge-title">FIX THE BUG EM JAVASCRIPT!</h3>
           </div>
           <div class="merge-timer-pill">⏱️ <span id="merge-countdown">25</span>s</div>
         </div>
 
         <div class="shield-pill full-width">
-          🛡️ TODOS OS DEVS ESTÃO EM PILOTO AUTOMÁTICO SEM DANO! O 1º ACERTO VALE 300 COMMITS; OS DEMAIS VALEM 240. TODOS RECEBEM O MESMO XP, SEM PUNIÇÃO AO ÚLTIMO!
+          🛡️ PILOTO AUTOMÁTICO ATIVO! 1º ACERTO: +300 COMMITS; DEMAIS: +240 COMMITS (+130 XP). CADA ACERTO ENFRAQUECE O MONÓLITO COLETIVO EM 22% DE HP!
         </div>
 
         <div class="merge-split">
@@ -263,11 +354,11 @@
             <pre id="merge-buggy-code" class="buggy-code-block"></pre>
 
             <div class="fix-section">
-              <label class="field-label">ESCOLHA OU DIGITE O FIX CORRETO PARA A LINHA COM BUG:</label>
+              <label class="field-label">ESCOLHA OU DIGITE UMA SOLUÇÃO EQUIVALENTE:</label>
               <div id="merge-options" class="merge-options-grid"></div>
 
               <div class="custom-fix-row">
-                <span>Ou digite a expressão corrigida:</span>
+                <span>Ou digite a expressão corrigida (soluções equivalentes são aceitas):</span>
                 <div class="join-row">
                   <input
                     id="merge-custom-input"
@@ -306,8 +397,10 @@
                 <th>#</th>
                 <th>Dev</th>
                 <th>Level</th>
-                <th>Bugs Mortos</th>
+                <th>Precisão JS</th>
                 <th>Deploys JS</th>
+                <th>Bugs Mortos</th>
+                <th>Contrib. Coletiva</th>
                 <th>Commits (Score)</th>
               </tr>
             </thead>
