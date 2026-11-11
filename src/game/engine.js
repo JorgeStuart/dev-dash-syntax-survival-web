@@ -1063,37 +1063,42 @@ export class GameEngine {
 
     this.spawnTimer -= dt;
     if (this.spawnTimer <= 0) {
-      this.spawnTimer = Math.max(0.45, 1.35 - elapsed * 0.0025);
-      const maxEnemies = 38 + this.snapshot.players.length * 10;
+      // Cadência mais rápida de spawn (hordas maiores estilo Vampire Survivors)
+      this.spawnTimer = Math.max(0.28, 0.95 - elapsed * 0.0022);
+      const maxEnemies = 65 + this.snapshot.players.length * 16;
       if (this.snapshot.enemies.length < maxEnemies) {
         const alivePlayers = this.snapshot.players.filter((p) => p.respawnTimer <= 0);
         if (alivePlayers.length > 0) {
-          const anchor = alivePlayers[Math.floor(Math.random() * alivePlayers.length)];
-          const ang = Math.random() * Math.PI * 2;
-          const dist = 460 + Math.random() * 180;
-          const sx = Math.max(-ARENA_HALF + 40, Math.min(ARENA_HALF - 40, anchor.x + Math.cos(ang) * dist));
-          const sy = Math.max(-ARENA_HALF + 40, Math.min(ARENA_HALF - 40, anchor.y + Math.sin(ang) * dist));
+          // Spawna de 1 a 3 bichos por pulso
+          const spawnCount = elapsed > 90 ? (Math.random() < 0.6 ? 2 : 3) : 1;
+          for (let s = 0; s < spawnCount; s++) {
+            const anchor = alivePlayers[Math.floor(Math.random() * alivePlayers.length)];
+            const ang = Math.random() * Math.PI * 2;
+            const dist = 440 + Math.random() * 200;
+            const sx = Math.max(-ARENA_HALF + 40, Math.min(ARENA_HALF - 40, anchor.x + Math.cos(ang) * dist));
+            const sy = Math.max(-ARENA_HALF + 40, Math.min(ARENA_HALF - 40, anchor.y + Math.sin(ang) * dist));
 
-          const roll = Math.random();
-          const tier = elapsed > 180 && roll > 0.78 ? 3 : elapsed > 60 && roll > 0.55 ? 2 : 1;
-          const stats = getBugStats(tier, scalingLvl);
+            const roll = Math.random();
+            const tier = elapsed > 180 && roll > 0.78 ? 3 : elapsed > 60 && roll > 0.55 ? 2 : 1;
+            const stats = getBugStats(tier, scalingLvl);
 
-          this.snapshot.enemies.push({
-            id: this.nextEntityId++,
-            kind: 'bug',
-            tier,
-            x: sx,
-            y: sy,
-            vx: 0,
-            vy: 0,
-            hp: stats.hp,
-            maxHp: stats.hp,
-            speed: stats.speed * 0.72,
-            scale: stats.scale,
-            xpReward: stats.xp,
-            walkCycle: Math.random() * 6,
-            hitFlash: 0,
-          });
+            this.snapshot.enemies.push({
+              id: this.nextEntityId++,
+              kind: 'bug',
+              tier,
+              x: sx,
+              y: sy,
+              vx: 0,
+              vy: 0,
+              hp: stats.hp,
+              maxHp: stats.hp,
+              speed: stats.speed * 0.72,
+              scale: stats.scale,
+              xpReward: stats.xp,
+              walkCycle: Math.random() * 6,
+              hitFlash: 0,
+            });
+          }
         }
       }
     }
@@ -1101,28 +1106,31 @@ export class GameEngine {
     // Onda de Hackers periódica
     this.hackerTimer -= dt;
     if (this.hackerTimer <= 0) {
-      this.hackerTimer = 24;
+      this.hackerTimer = 18;
       const alive = this.snapshot.players.filter((p) => p.respawnTimer <= 0);
       if (alive.length > 0) {
-        const anchor = alive[Math.floor(Math.random() * alive.length)];
-        const hStats = getHackerStats(scalingLvl);
-        const ang = Math.random() * Math.PI * 2;
-        this.snapshot.enemies.push({
-          id: this.nextEntityId++,
-          kind: 'hacker',
-          tier: 2,
-          x: anchor.x + Math.cos(ang) * 480,
-          y: anchor.y + Math.sin(ang) * 480,
-          vx: 0,
-          vy: 0,
-          hp: hStats.hp,
-          maxHp: hStats.hp,
-          speed: hStats.speed * 0.76,
-          scale: hStats.scale,
-          xpReward: hStats.xp,
-          walkCycle: 0,
-          hitFlash: 0,
-        });
+        const hackerCount = elapsed > 100 ? 2 : 1;
+        for (let hc = 0; hc < hackerCount; hc++) {
+          const anchor = alive[Math.floor(Math.random() * alive.length)];
+          const hStats = getHackerStats(scalingLvl);
+          const ang = Math.random() * Math.PI * 2;
+          this.snapshot.enemies.push({
+            id: this.nextEntityId++,
+            kind: 'hacker',
+            tier: 2,
+            x: anchor.x + Math.cos(ang) * 480,
+            y: anchor.y + Math.sin(ang) * 480,
+            vx: 0,
+            vy: 0,
+            hp: hStats.hp,
+            maxHp: hStats.hp,
+            speed: hStats.speed * 0.76,
+            scale: hStats.scale,
+            xpReward: hStats.xp,
+            walkCycle: 0,
+            hitFlash: 0,
+          });
+        }
       }
     }
   }

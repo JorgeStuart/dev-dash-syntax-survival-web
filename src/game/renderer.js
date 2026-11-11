@@ -253,10 +253,16 @@ export class GameRenderer {
     ctx.fillStyle = '#07090e';
     ctx.fillRect(0, 0, w, h);
 
-    ctx.save();
-    ctx.translate(w / 2 - this.camX, h / 2 - this.camY);
+    // Zoom da câmera: se for tela estreita (celular / <= 768px), afasta a câmera (zoom out ~0.78)
+    const isMobileScreen = Math.min(w, h) < 768;
+    const cameraZoom = isMobileScreen ? 0.76 : 1.0;
 
-    this.drawDataCenterFloor(ctx, w, h);
+    ctx.save();
+    ctx.translate(w / 2, h / 2);
+    ctx.scale(cameraZoom, cameraZoom);
+    ctx.translate(-this.camX, -this.camY);
+
+    this.drawDataCenterFloor(ctx, w / cameraZoom, h / cameraZoom);
     this.drawArenaBorders(ctx);
 
     // 2. Terminais de Código JS
