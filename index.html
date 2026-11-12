@@ -27,8 +27,8 @@
       <div class="cyber-panel lobby-panel">
         <div class="top-bar-row">
           <div class="badge-tag">WEB MULTIPLAYER P2P // ZERO SERVER COST</div>
-          <button id="btn-open-tutorial" type="button" class="cyber-btn small secondary">
-            📖 COMO JOGAR / TUTORIAL
+          <button id="btn-open-tutorial" type="button" class="cyber-btn small tutorial-lobby-btn">
+            📖 COMO JOGAR (TUTORIAL)
           </button>
         </div>
         <h1 class="game-title">DEV DASH<span>: SYNTAX SURVIVAL</span></h1>
@@ -176,48 +176,66 @@
       </div>
     </div>
 
-    <!-- MODAL DE TUTORIAL / COMO JOGAR -->
+    <!-- MODAL DE TUTORIAL / COMO JOGAR (INTERATIVO EM 3 PASSOS) -->
     <div id="tutorial-modal" class="code-modal-backdrop hidden">
-      <div class="cyber-panel code-modal tutorial-modal-panel">
-        <div class="modal-header">
-          <div>
-            <span class="modal-badge green">📖 TUTORIAL DE INÍCIO</span>
-            <h3>BEM-VINDO AO DEV DASH: SYNTAX SURVIVAL!</h3>
-          </div>
-          <button id="btn-close-tutorial" type="button" class="cyber-btn small secondary">✕ FECHAR [ESC]</button>
+      <div class="cyber-panel code-modal clean-tutorial-card">
+        <div class="clean-quiz-header">
+          <span class="clean-badge green">📖 TUTORIAL RÁPIDO</span>
+          <span id="tutorial-step-indicator" class="tutorial-step-text">Passo 1 de 3</span>
+          <button id="btn-close-tutorial" type="button" class="clean-close-btn" title="Pular Tutorial [ESC]">✕</button>
         </div>
-        <div class="tutorial-grid">
-          <div class="tutorial-card">
-            <strong>🎮 1. Controles Simples (Celular & PC)</strong>
-            <p><strong>No Celular:</strong> Use o <strong>joystick virtual</strong> no canto inferior esquerdo para andar e toque no botão <strong>⌨️ CODAR [E]</strong> para abrir terminais.<br><strong>No PC:</strong> Ande com <code>WASD</code> / Setas e aperte <code>E</code> no terminal.</p>
+
+        <div class="tutorial-slides-box">
+          <!-- Slide 1: Movimento e Ataque -->
+          <div class="tutorial-slide" id="tutorial-slide-1">
+            <div class="slide-hero-icon">🕹️</div>
+            <h3 class="slide-title">1. Movimento & Ataque Automático</h3>
+            <div class="slide-body-text">
+              <p><strong>No Celular:</strong> Arraste o <strong>joystick virtual</strong> no canto esquerdo da tela para andar pelo Data Center.</p>
+              <p><strong>No Computador:</strong> Use <code>WASD</code> ou as <strong>Setas do teclado</strong>.</p>
+              <div class="slide-highlight-pill">
+                ⚡ <strong>Ataque Automático:</strong> Suas armas atiram sozinhas nos bugs mais próximos. Você só precisa desviar e coletar XP!
+              </div>
+            </div>
           </div>
-          <div class="tutorial-card">
-            <strong>✨ 2. Desafios 100% Múltipla Escolha</strong>
-            <p>Não precisa digitar código no teclado! Todos os desafios agora são <strong>múltipla escolha</strong>: basta ler a pergunta e tocar na alternativa correta com a sintaxe certa de JavaScript.</p>
+
+          <!-- Slide 2: Terminais e Escudo -->
+          <div class="tutorial-slide hidden" id="tutorial-slide-2">
+            <div class="slide-hero-icon">🛡️</div>
+            <h3 class="slide-title">2. Terminais & Escudo de Foco</h3>
+            <div class="slide-body-text">
+              <p>Aproxime-se dos <strong>terminais azuis</strong> no mapa e toque no botão <strong>⌨️ CODAR [E]</strong> (ou aperte a tecla <code>E</code>).</p>
+              <div class="slide-highlight-pill shield-green">
+                🛡️ <strong>Zero Dano!</strong> Enquanto você resolve o desafio, seu personagem fica parado e <strong>100% imune a dano</strong> dos monstros por até 18 segundos.
+              </div>
+            </div>
           </div>
-          <div class="tutorial-card">
-            <strong>⭐ 3. Nível Progressivo de Perguntas</strong>
-            <p>A dificuldade das perguntas evolui com a sua partida:<br>
-            • <strong>Nível 1 a 3:</strong> <em>Iniciante</em> (arrays, objetos, operações básicas)<br>
-            • <strong>Nível 4 a 6:</strong> <em>Intermediário</em> (reduce, destructuring, promises)<br>
-            • <strong>Nível 7+:</strong> <em>Avançado</em> (async/await, closures, fallbacks)</p>
-          </div>
-          <div class="tutorial-card">
-            <strong>🛡️ 4. Escudo de Foco (Sem Dano!)</strong>
-            <p>Ao abrir um terminal de código ou durante o evento global de <strong>Merge Conflict</strong>, seu personagem fica parado e recebe um <strong>Escudo de Foco</strong>: você fica 100% imune a dano dos monstros enquanto escolhe a resposta!</p>
-          </div>
-          <div class="tutorial-card">
-            <strong>⚔️ 5. Ataque Automático & Upgrades</strong>
-            <p>Suas armas atiram sozinhas nos bugs próximos. Derrote inimigos para coletar orbes de XP, subir de nível e desbloquear upgrades de ataque, firewall e cadência!</p>
-          </div>
-          <div class="tutorial-card">
-            <strong>💥 6. Efeitos na Arena & Commits</strong>
-            <p>Cada acerto de terminal libera buffs poderosos na arena (<em>Purga de Bugs</em>, <em>Overclock de Cadência</em>, <em>Cura</em> ou <em>Firewall</em>) e soma Commits para vencer a Sprint!</p>
+
+          <!-- Slide 3: Múltipla Escolha e Upgrades -->
+          <div class="tutorial-slide hidden" id="tutorial-slide-3">
+            <div class="slide-hero-icon">🎯</div>
+            <h3 class="slide-title">3. Múltipla Escolha & Upgrades</h3>
+            <div class="slide-body-text">
+              <p>Não precisa digitar nada! Basta ler a pergunta e <strong>tocar na alternativa correta</strong> (A, B, C ou D).</p>
+              <div class="slide-highlight-pill">
+                ⭐ Cada acerto elimina bugs, dá XP e Commits. Colete orbes verdes de XP para subir de nível e escolher novas armas!
+              </div>
+            </div>
           </div>
         </div>
-        <div class="tutorial-action-row">
-          <button id="btn-start-tutorial-play" type="button" class="cyber-btn start-btn full-width">
-            🚀 ENTENDI, VAMOS AO JOGO!
+
+        <!-- Indicador de bolinhas -->
+        <div class="tutorial-dots-row">
+          <span class="t-dot active" id="tdot-1"></span>
+          <span class="t-dot" id="tdot-2"></span>
+          <span class="t-dot" id="tdot-3"></span>
+        </div>
+
+        <div class="tutorial-nav-row">
+          <button id="btn-tutorial-prev" type="button" class="cyber-btn small secondary hidden">◀ Anterior</button>
+          <button id="btn-tutorial-next" type="button" class="cyber-btn primary">Próximo ▶</button>
+          <button id="btn-start-tutorial-play" type="button" class="cyber-btn start-btn hidden">
+            🚀 VAMOS JOGAR!
           </button>
         </div>
       </div>
@@ -312,69 +330,42 @@
       </div>
     </div>
 
-    <!-- MODAL 1: TERMINAL DE DESAFIOS JS (MÚLTIPLA ESCOLHA + EFEITO NA ARENA) -->
+    <!-- MODAL 1: TERMINAL DE DESAFIOS JS (MÚLTIPLA ESCOLHA LIMPO E MINIMALISTA) -->
     <div id="terminal-modal" class="code-modal-backdrop hidden">
-      <div class="cyber-panel code-modal terminal-theme">
-        <div class="modal-header">
-          <div>
-            <div class="terminal-badges-row">
-              <span id="terminal-mode-badge" class="modal-badge green">✨ MÚLTIPLA ESCOLHA</span>
-              <span id="terminal-topic-badge" class="modal-badge cyan">ARRAYS • ⭐ INICIANTE</span>
-              <span id="terminal-effect-badge" class="modal-badge amber">💥 EFEITO NA ARENA</span>
-            </div>
-            <h3 id="terminal-modal-title">DESAFIO DE SINTAXE JS</h3>
-          </div>
-          <div id="terminal-focus-timer" class="shield-pill">🛡️ FOCO POR ATÉ 18s • ESC PARA SAIR</div>
+      <div class="cyber-panel code-modal clean-quiz-modal terminal-theme">
+        <div class="clean-quiz-header">
+          <span id="terminal-topic-badge" class="clean-badge cyan">ARRAYS • ⭐ INICIANTE</span>
+          <div id="terminal-focus-timer" class="clean-timer-pill">🛡️ IMUNE (18s)</div>
+          <button id="btn-close-terminal" class="clean-close-btn" type="button" title="Fechar [ESC]">✕</button>
         </div>
 
-        <p class="modal-desc" id="terminal-prompt-desc"></p>
-
-        <pre id="terminal-context-code" class="buggy-code-block hidden"></pre>
-
-        <div class="options-selection-box">
-          <div class="field-label">SELECIONE A ALTERNATIVA CORRETA:</div>
-          <div id="terminal-options" class="merge-options-grid"></div>
-        </div>
-
-        <div id="terminal-feedback" class="merge-feedback"></div>
-
-        <div class="modal-footer">
-          <span class="hint-text">💡 Dica: Toque ou clique na alternativa correta para aplicar o patch imediatamente!</span>
-          <button id="btn-close-terminal" class="cyber-btn small danger">[ESC] Sair do Terminal</button>
+        <div class="clean-quiz-content">
+          <h3 id="terminal-prompt-desc" class="clean-question-title"></h3>
+          <pre id="terminal-context-code" class="clean-code-block hidden"></pre>
+          <div id="terminal-options" class="clean-options-grid"></div>
+          <div id="terminal-feedback" class="clean-feedback"></div>
         </div>
       </div>
     </div>
 
-    <!-- MODAL 2: GLOBAL MERGE CONFLICT (PVP FIX THE BUG) -->
+    <!-- MODAL 2: GLOBAL MERGE CONFLICT (LIMPO E MINIMALISTA) -->
     <div id="merge-modal" class="code-modal-backdrop hidden">
-      <div class="cyber-panel code-modal merge-theme">
-        <div class="modal-header">
-          <div>
-            <span class="modal-badge red">⚠️ SIRENE GLOBAL: MERGE CONFLICT & BOSS COLETIVO</span>
-            <h3 id="merge-title">FIX THE BUG EM JAVASCRIPT!</h3>
-          </div>
-          <div class="merge-timer-pill">⏱️ <span id="merge-countdown">25</span>s</div>
+      <div class="cyber-panel code-modal clean-quiz-modal merge-theme">
+        <div class="clean-quiz-header merge">
+          <span class="clean-badge red">⚠️ MERGE CONFLICT</span>
+          <div class="clean-timer-pill red">⏱️ <span id="merge-countdown">25</span>s</div>
         </div>
 
-        <div class="shield-pill full-width">
-          🛡️ PILOTO AUTOMÁTICO ATIVO! 1º ACERTO: +300 COMMITS; DEMAIS: +240 COMMITS (+130 XP). CADA ACERTO ENFRAQUECE O MONÓLITO COLETIVO EM 22% DE HP!
-        </div>
+        <div class="clean-quiz-content">
+          <h3 id="merge-title" class="clean-question-title"></h3>
+          <p id="merge-description" class="clean-question-desc"></p>
+          <pre id="merge-buggy-code" class="clean-code-block buggy"></pre>
+          <div id="merge-options" class="clean-options-grid"></div>
+          <div id="merge-feedback" class="clean-feedback"></div>
 
-        <div class="merge-split">
-          <div class="merge-problem-col">
-            <p id="merge-description" class="merge-desc"></p>
-            <pre id="merge-buggy-code" class="buggy-code-block"></pre>
-
-            <div class="fix-section">
-              <label class="field-label">SELECIONE A CORREÇÃO DO BUG:</label>
-              <div id="merge-options" class="merge-options-grid"></div>
-              <div id="merge-feedback" class="merge-feedback"></div>
-            </div>
-          </div>
-
-          <div class="merge-race-col">
-            <div class="race-title">🏁 CORRIDA DE DEPLOY AO VIVO</div>
-            <ul id="merge-race-list" class="merge-race-list"></ul>
+          <div class="clean-race-container">
+            <span class="clean-race-label">Corrida de Deploy da Equipe:</span>
+            <ul id="merge-race-list" class="clean-race-chips"></ul>
           </div>
         </div>
       </div>

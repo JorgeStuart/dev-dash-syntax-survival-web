@@ -21,6 +21,9 @@ const btnOpenTutorial = document.getElementById('btn-open-tutorial');
 const tutorialModal = document.getElementById('tutorial-modal');
 const btnCloseTutorial = document.getElementById('btn-close-tutorial');
 const btnStartTutorialPlay = document.getElementById('btn-start-tutorial-play');
+const btnTutorialPrev = document.getElementById('btn-tutorial-prev');
+const btnTutorialNext = document.getElementById('btn-tutorial-next');
+const tutorialStepIndicator = document.getElementById('tutorial-step-indicator');
 const playerNameInput = document.getElementById('player-name-input');
 const classCards = document.querySelectorAll('.class-card');
 const colorSelectorEl = document.getElementById('color-selector');
@@ -256,38 +259,86 @@ playerNameInput.addEventListener('input', () => {
 
 syncLobbySelectionUI();
 
-// Modal de Tutorial / Como Jogar
+// Modal de Tutorial / Como Jogar (Passo a Passo)
+let currentTutorialStep = 1;
+let tutorialPendingStart = null;
+
+function setTutorialStep(step) {
+  currentTutorialStep = Math.max(1, Math.min(3, step));
+  for (let i = 1; i <= 3; i++) {
+    const slide = document.getElementById(`tutorial-slide-${i}`);
+    const dot = document.getElementById(`tdot-${i}`);
+    if (slide) slide.classList.toggle('hidden', i !== currentTutorialStep);
+    if (dot) dot.classList.toggle('active', i === currentTutorialStep);
+  }
+  if (tutorialStepIndicator) {
+    tutorialStepIndicator.textContent = `Passo ${currentTutorialStep} de 3`;
+  }
+  if (btnTutorialPrev) {
+    btnTutorialPrev.classList.toggle('hidden', currentTutorialStep === 1);
+  }
+  if (btnTutorialNext) {
+    btnTutorialNext.classList.toggle('hidden', currentTutorialStep === 3);
+  }
+  if (btnStartTutorialPlay) {
+    btnStartTutorialPlay.classList.toggle('hidden', currentTutorialStep !== 3);
+  }
+}
+
+function openTutorial(onFinish = null) {
+  tutorialPendingStart = onFinish;
+  setTutorialStep(1);
+  if (tutorialModal) tutorialModal.classList.remove('hidden');
+}
+
 function dismissTutorial() {
   try {
     localStorage.setItem('devdash_tutorial_seen', 'true');
   } catch (_) {}
   if (tutorialModal) tutorialModal.classList.add('hidden');
+  if (typeof tutorialPendingStart === 'function') {
+    const cb = tutorialPendingStart;
+    tutorialPendingStart = null;
+    cb();
+  }
 }
 
-if (btnOpenTutorial && tutorialModal) {
+if (btnOpenTutorial) {
   btnOpenTutorial.addEventListener('click', () => {
     sfx.keyHit();
-    tutorialModal.classList.remove('hidden');
+    openTutorial();
   });
 }
-if (btnCloseTutorial && tutorialModal) {
+if (btnCloseTutorial) {
   btnCloseTutorial.addEventListener('click', () => {
     dismissTutorial();
   });
 }
-if (btnStartTutorialPlay && tutorialModal) {
+if (btnStartTutorialPlay) {
   btnStartTutorialPlay.addEventListener('click', () => {
     sfx.keyHit();
     dismissTutorial();
   });
 }
+if (btnTutorialNext) {
+  btnTutorialNext.addEventListener('click', () => {
+    sfx.keyHit();
+    setTutorialStep(currentTutorialStep + 1);
+  });
+}
+if (btnTutorialPrev) {
+  btnTutorialPrev.addEventListener('click', () => {
+    sfx.keyHit();
+    setTutorialStep(currentTutorialStep - 1);
+  });
+}
 
-// Auto-abrir tutorial na primeira vez do usuário
+// Auto-abrir tutorial na primeira visita
 try {
   if (!localStorage.getItem('devdash_tutorial_seen')) {
     setTimeout(() => {
-      if (tutorialModal) tutorialModal.classList.remove('hidden');
-    }, 450);
+      openTutorial();
+    }, 400);
   }
 } catch (_) {}
 
@@ -455,16 +506,27 @@ btnCopyLink.addEventListener('click', () => {
 
 btnStartMatch.addEventListener('click', () => {
   if (!p2p.isHost) return;
-  if (selRoomMode && selBotDifficulty) {
-    p2p.updateRoomSettings({
-      mode: selRoomMode.value || 'casual',
-      botDifficulty: selBotDifficulty.value || 'normal',
-    });
+
+  const startSprint = () => {
+    if (selRoomMode && selBotDifficulty) {
+      p2p.updateRoomSettings({
+        mode: selRoomMode.value || 'casual',
+        botDifficulty: selBotDifficulty.value || 'normal',
+      });
+    }
+    engine.startNewMatch(p2p.lobbyPlayers, chkFillBots.checked, p2p.roomSettings);
+    currentSnapshot = engine.snapshot;
+    p2p.broadcastMatchStart(currentSnapshot);
+    enterMatchUI();
+  };
+
+  // Se o jogador ainda não viu o tutorial, abre o tutorial antes de iniciar a partida!
+  if (!localStorage.getItem('devdash_tutorial_seen')) {
+    openTutorial(startSprint);
+    return;
   }
-  engine.startNewMatch(p2p.lobbyPlayers, chkFillBots.checked, p2p.roomSettings);
-  currentSnapshot = engine.snapshot;
-  p2p.broadcastMatchStart(currentSnapshot);
-  enterMatchUI();
+
+  startSprint();
 });
 
 function enterMatchUI() {
@@ -688,29 +750,23 @@ const DIFFICULTY_LABELS = {
 };
 
 function openTerminalModal(term) {
-  document.getElementById('terminal-focus-timer').textContent = '🛡️ RESERVANDO TERMINAL...';
+  const focusTimer = document.getElementById('terminal-focus-timer');
+  if (focusTimer) focusTimer.textContent = '🛡️ IMUNE (18s)';
   terminalRequestedAt = performance.now();
   keysDown.clear();
   activeTerminalId = term.id;
   activeSnippet = JS_SPEED_SNIPPETS.find((s) => s.id === term.snippetId) ?? JS_SPEED_SNIPPETS[0];
 
-  const modeMeta = TERMINAL_MODE_LABELS[activeSnippet.mode] || TERMINAL_MODE_LABELS.complete;
-  const effectMeta = ARENA_EFFECT_TYPES[activeSnippet.effectType] || ARENA_EFFECT_TYPES.filter_purge;
   const diffDisplay = DIFFICULTY_LABELS[activeSnippet.difficulty] || (activeSnippet.difficulty || 'iniciante').toUpperCase();
 
-  if (terminalModeBadge) terminalModeBadge.textContent = modeMeta.badge;
   if (terminalTopicBadge) {
     terminalTopicBadge.textContent = `${(activeSnippet.topic || 'js').toUpperCase()} • ${diffDisplay}`;
   }
-  if (terminalEffectBadge) {
-    terminalEffectBadge.textContent = effectMeta.label;
-    terminalEffectBadge.style.borderColor = effectMeta.color;
-    terminalEffectBadge.style.color = effectMeta.color;
-  }
-  if (terminalModalTitle) terminalModalTitle.textContent = modeMeta.title;
 
-  const bonus = currentSnapshot.players.find((p) => p.id === p2p.myId)?.devClass === 'secops' ? 1.25 : 1;
-  terminalPromptDesc.innerHTML = `${escapeHtml(activeSnippet.desc)} <strong style="color:#33ff88">(+${Math.round(activeSnippet.commitsReward * bonus)} Commits & +${Math.round(activeSnippet.xpReward * bonus)} XP)</strong>`;
+  // Pergunta direta, limpa e legível sem poluição visual
+  if (terminalPromptDesc) {
+    terminalPromptDesc.textContent = activeSnippet.desc;
+  }
 
   if (terminalContextCode) {
     if (activeSnippet.promptCode) {
@@ -733,7 +789,7 @@ function openTerminalModal(term) {
     terminalOptionsEl.innerHTML = shuffled
       .map(
         (opt, idx) =>
-          `<button type="button" class="merge-opt-btn" data-ans="${escapeHtml(opt)}">
+          `<button type="button" class="clean-opt-btn merge-opt-btn" data-ans="${escapeHtml(opt)}">
             <span class="opt-badge">${letters[idx] || (idx + 1)}</span>
             <code class="opt-code">${escapeHtml(opt)}</code>
           </button>`
@@ -769,8 +825,8 @@ function submitTerminalAttempt(candidate) {
   } else {
     sfx.keyError();
     if (terminalFeedback) {
-      terminalFeedback.style.color = '#ff3344';
-      terminalFeedback.textContent = '❌ Resposta incorreta! Escolha outra opção de correção.';
+      terminalFeedback.style.color = '#ff4d4d';
+      terminalFeedback.textContent = '❌ Resposta incorreta! Tente outra alternativa.';
     }
   }
 }
@@ -845,22 +901,18 @@ function syncMergeConflictModal() {
 
   mergeCountdown.textContent = String(Math.ceil(activeMerge.timeRemaining));
 
-  // Atualiza corrida de deploy ao vivo de todos os jogadores da sala
-  mergeRaceList.innerHTML = currentSnapshot.players
-    .map((p) => {
-      const rankBadge = p.mergeFinishedRank > 0 ? `🏆 #${p.mergeFinishedRank} PUSH!` : `${Math.floor(p.mergeProgress)}%`;
-      return `
-      <li class="race-item">
-        <div class="race-item-top">
-          <strong style="color:${p.color}">${escapeHtml(p.name)}</strong>
-          <span>${rankBadge}</span>
-        </div>
-        <div class="race-bar-bg">
-          <div class="race-bar-fill" style="width:${p.mergeProgress}%"></div>
-        </div>
-      </li>`;
-    })
-    .join('');
+  // Atualiza chips compactos da equipe
+  if (mergeRaceList) {
+    mergeRaceList.innerHTML = currentSnapshot.players
+      .map((p) => {
+        const isDone = p.mergeFinishedRank > 0;
+        return `
+        <li class="race-chip ${isDone ? 'done' : ''}">
+          <strong style="color:${p.color}">${escapeHtml(p.name)}</strong>: ${isDone ? '🏆 PUSH!' : `${Math.floor(p.mergeProgress)}%`}
+        </li>`;
+      })
+      .join('');
+  }
 }
 
 function attemptMergeFix(candidate) {
@@ -1042,8 +1094,10 @@ function updateHUD() {
     if (me.codingType === 'terminal' && me.terminalId === activeTerminalId) {
       const seconds = Math.ceil(me.terminalTimeRemaining);
       const timer = document.getElementById('terminal-focus-timer');
-      timer.textContent = `🛡️ ${seconds}s DE FOCO • AO TERMINAR, VOCÊ VOLTA À ARENA`;
-      timer.style.color = seconds <= 5 ? '#ffb020' : '';
+      if (timer) {
+        timer.textContent = `🛡️ IMUNE (${seconds}s)`;
+        timer.style.color = seconds <= 5 ? '#ffb020' : '';
+      }
     } else if (performance.now() - terminalRequestedAt > 1200) {
       closeTerminalModal();
     }
