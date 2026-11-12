@@ -20,6 +20,7 @@ const lobbyScreen = document.getElementById('lobby-screen');
 const btnOpenTutorial = document.getElementById('btn-open-tutorial');
 const tutorialModal = document.getElementById('tutorial-modal');
 const btnCloseTutorial = document.getElementById('btn-close-tutorial');
+const btnStartTutorialPlay = document.getElementById('btn-start-tutorial-play');
 const playerNameInput = document.getElementById('player-name-input');
 const classCards = document.querySelectorAll('.class-card');
 const colorSelectorEl = document.getElementById('color-selector');
@@ -256,6 +257,13 @@ playerNameInput.addEventListener('input', () => {
 syncLobbySelectionUI();
 
 // Modal de Tutorial / Como Jogar
+function dismissTutorial() {
+  try {
+    localStorage.setItem('devdash_tutorial_seen', 'true');
+  } catch (_) {}
+  if (tutorialModal) tutorialModal.classList.add('hidden');
+}
+
 if (btnOpenTutorial && tutorialModal) {
   btnOpenTutorial.addEventListener('click', () => {
     sfx.keyHit();
@@ -264,9 +272,24 @@ if (btnOpenTutorial && tutorialModal) {
 }
 if (btnCloseTutorial && tutorialModal) {
   btnCloseTutorial.addEventListener('click', () => {
-    tutorialModal.classList.add('hidden');
+    dismissTutorial();
   });
 }
+if (btnStartTutorialPlay && tutorialModal) {
+  btnStartTutorialPlay.addEventListener('click', () => {
+    sfx.keyHit();
+    dismissTutorial();
+  });
+}
+
+// Auto-abrir tutorial na primeira vez do usuário
+try {
+  if (!localStorage.getItem('devdash_tutorial_seen')) {
+    setTimeout(() => {
+      if (tutorialModal) tutorialModal.classList.remove('hidden');
+    }, 450);
+  }
+} catch (_) {}
 
 // Controles de Modo da Sala e Dificuldade dos Bots (Host)
 if (selRoomMode) {
@@ -478,8 +501,28 @@ window.addEventListener('keydown', (e) => {
     return;
   }
 
-  // Se estiver com modal de código aberto, não captura WASD como movimento
-  if (activeTerminalId !== null || !mergeModal.classList.contains('hidden')) {
+  // Se estiver com modal de código aberto, permite responder com 1-4 ou A-D (sem mover WASD)
+  if (activeTerminalId !== null) {
+    const key = e.key.toLowerCase();
+    const optMap = { '1': 0, '2': 1, '3': 2, '4': 3, 'a': 0, 'b': 1, 'c': 2, 'd': 3 };
+    if (key in optMap) {
+      const btns = terminalOptionsEl?.querySelectorAll('.merge-opt-btn');
+      if (btns && btns[optMap[key]]) {
+        btns[optMap[key]].click();
+      }
+    }
+    return;
+  }
+
+  if (!mergeModal.classList.contains('hidden')) {
+    const key = e.key.toLowerCase();
+    const optMap = { '1': 0, '2': 1, '3': 2, '4': 3, 'a': 0, 'b': 1, 'c': 2, 'd': 3 };
+    if (key in optMap) {
+      const btns = mergeOptionsEl?.querySelectorAll('.merge-opt-btn');
+      if (btns && btns[optMap[key]]) {
+        btns[optMap[key]].click();
+      }
+    }
     return;
   }
 
@@ -632,10 +675,16 @@ function checkTerminalProximity(meX, meY, terminals, interact = false) {
 }
 
 const TERMINAL_MODE_LABELS = {
-  typing: { badge: '💻 DIGITAÇÃO JS', title: 'TERMINAL DE DIGITAÇÃO RÁPIDA' },
-  complete: { badge: '🧩 COMPLETAR EXPRESSÃO', title: 'COMPLETE A EXPRESSÃO JAVASCRIPT' },
+  typing: { badge: '✨ MÚLTIPLA ESCOLHA', title: 'DESAFIO DE SINTAXE JS' },
+  complete: { badge: '🧩 COMPLETAR CÓDIGO', title: 'COMPLETE A EXPRESSÃO JAVASCRIPT' },
   spot_bug: { badge: '🔍 IDENTIFICAR BUG', title: 'IDENTIFIQUE A CORREÇÃO DO BUG' },
   fix_code: { badge: '🛠️ CORRIGIR TRECHO', title: 'CORRIJA O TRECHO DE CÓDIGO JS' },
+};
+
+const DIFFICULTY_LABELS = {
+  iniciante: '⭐ INICIANTE',
+  intermediario: '⭐⭐ INTERMEDIÁRIO',
+  avancado: '⭐⭐⭐ AVANÇADO',
 };
 
 function openTerminalModal(term) {
@@ -645,12 +694,13 @@ function openTerminalModal(term) {
   activeTerminalId = term.id;
   activeSnippet = JS_SPEED_SNIPPETS.find((s) => s.id === term.snippetId) ?? JS_SPEED_SNIPPETS[0];
 
-  const modeMeta = TERMINAL_MODE_LABELS[activeSnippet.mode] || TERMINAL_MODE_LABELS.typing;
+  const modeMeta = TERMINAL_MODE_LABELS[activeSnippet.mode] || TERMINAL_MODE_LABELS.complete;
   const effectMeta = ARENA_EFFECT_TYPES[activeSnippet.effectType] || ARENA_EFFECT_TYPES.filter_purge;
+  const diffDisplay = DIFFICULTY_LABELS[activeSnippet.difficulty] || (activeSnippet.difficulty || 'iniciante').toUpperCase();
 
   if (terminalModeBadge) terminalModeBadge.textContent = modeMeta.badge;
   if (terminalTopicBadge) {
-    terminalTopicBadge.textContent = `${(activeSnippet.topic || 'js').toUpperCase()} • ${(activeSnippet.difficulty || 'iniciante').toUpperCase()}`;
+    terminalTopicBadge.textContent = `${(activeSnippet.topic || 'js').toUpperCase()} • ${diffDisplay}`;
   }
   if (terminalEffectBadge) {
     terminalEffectBadge.textContent = effectMeta.label;
@@ -673,31 +723,35 @@ function openTerminalModal(term) {
   }
 
   if (terminalOptionsEl) {
-    if (Array.isArray(activeSnippet.options) && activeSnippet.options.length > 0) {
-      const shuffled = [...activeSnippet.options].sort(() => Math.random() - 0.5);
-      terminalOptionsEl.innerHTML = shuffled
-        .map(
-          (opt) =>
-            `<button type="button" class="merge-opt-btn" data-ans="${escapeHtml(opt)}"><code>${escapeHtml(opt)}</code></button>`
-        )
-        .join('');
-      terminalOptionsEl.classList.remove('hidden');
-      terminalOptionsEl.querySelectorAll('.merge-opt-btn').forEach((btn) => {
-        btn.addEventListener('click', () => {
-          submitTerminalAttempt(btn.dataset.ans || '');
-        });
+    const rawOptions =
+      Array.isArray(activeSnippet.options) && activeSnippet.options.length > 0
+        ? activeSnippet.options
+        : [activeSnippet.code];
+    const shuffled = [...rawOptions].sort(() => Math.random() - 0.5);
+    const letters = ['A', 'B', 'C', 'D'];
+
+    terminalOptionsEl.innerHTML = shuffled
+      .map(
+        (opt, idx) =>
+          `<button type="button" class="merge-opt-btn" data-ans="${escapeHtml(opt)}">
+            <span class="opt-badge">${letters[idx] || (idx + 1)}</span>
+            <code class="opt-code">${escapeHtml(opt)}</code>
+          </button>`
+      )
+      .join('');
+    terminalOptionsEl.classList.remove('hidden');
+    terminalOptionsEl.querySelectorAll('.merge-opt-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        submitTerminalAttempt(btn.dataset.ans || '');
       });
-    } else {
-      terminalOptionsEl.innerHTML = '';
-      terminalOptionsEl.classList.add('hidden');
-    }
+    });
   }
 
-  if (terminalFeedback) terminalFeedback.textContent = '';
-  terminalHiddenInput.value = '';
-  renderSnippetHighlight('');
+  if (terminalFeedback) {
+    terminalFeedback.textContent = '';
+    terminalFeedback.style.color = '';
+  }
   terminalModal.classList.remove('hidden');
-  setTimeout(() => terminalHiddenInput.focus(), 20);
 
   p2p.sendToHost({ type: 'start_coding', terminalId: term.id });
 }
@@ -716,71 +770,9 @@ function submitTerminalAttempt(candidate) {
     sfx.keyError();
     if (terminalFeedback) {
       terminalFeedback.style.color = '#ff3344';
-      terminalFeedback.textContent = '❌ Resposta incorreta! Revise a sintaxe ou escolha outra opção.';
+      terminalFeedback.textContent = '❌ Resposta incorreta! Escolha outra opção de correção.';
     }
   }
-}
-
-function renderSnippetHighlight(typed) {
-  if (!activeSnippet) return;
-  const target = activeSnippet.code;
-  let html = '';
-  let correctCount = 0;
-
-  for (let i = 0; i < target.length; i++) {
-    const ch = target[i] === ' ' ? '&nbsp;' : escapeHtml(target[i]);
-    if (i < typed.length) {
-      if (typed[i] === target[i]) {
-        html += `<span class="char-correct">${ch}</span>`;
-        correctCount++;
-      } else {
-        html += `<span class="char-wrong">${ch}</span>`;
-      }
-    } else if (i === typed.length) {
-      html += `<span class="char-current">${ch}</span>`;
-    } else {
-      html += `<span class="char-pending">${ch}</span>`;
-    }
-  }
-
-  terminalTargetCode.innerHTML = html;
-  const pct = Math.floor((correctCount / target.length) * 100);
-  terminalProgressPct.textContent = `${pct}%`;
-}
-
-terminalHiddenInput.addEventListener('input', () => {
-  if (!activeSnippet || activeTerminalId === null) return;
-  const typed = terminalHiddenInput.value;
-  const target = activeSnippet.code;
-
-  const lastIdx = typed.length - 1;
-  if (lastIdx >= 0) {
-    if (typed[lastIdx] === target[lastIdx]) {
-      sfx.keyHit();
-    } else {
-      sfx.keyError();
-    }
-  }
-
-  if (terminalFeedback) terminalFeedback.textContent = '';
-  renderSnippetHighlight(typed);
-
-  if (typed === target) {
-    submitTerminalAttempt(typed);
-  }
-});
-
-terminalHiddenInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') {
-    e.preventDefault();
-    submitTerminalAttempt(terminalHiddenInput.value);
-  }
-});
-
-if (btnSubmitTerminal) {
-  btnSubmitTerminal.addEventListener('click', () => {
-    submitTerminalAttempt(terminalHiddenInput.value);
-  });
 }
 
 function closeTerminalModal() {
@@ -825,15 +817,19 @@ function syncMergeConflictModal() {
     mergeTitle.textContent = currentMergeChallenge.title;
     mergeDescription.textContent = currentMergeChallenge.description;
     mergeBuggyCode.textContent = currentMergeChallenge.buggyCode;
-    mergeCustomInput.value = '';
+    if (mergeCustomInput) mergeCustomInput.value = '';
     mergeFeedback.textContent = '';
 
-    // Embaralha opções
+    // Embaralha opções com letras A, B, C, D
     const shuffled = [...currentMergeChallenge.options].sort(() => Math.random() - 0.5);
+    const letters = ['A', 'B', 'C', 'D'];
     mergeOptionsEl.innerHTML = shuffled
       .map(
-        (opt) =>
-          `<button class="merge-opt-btn" data-ans="${escapeHtml(opt)}"><code>${escapeHtml(opt)}</code></button>`
+        (opt, idx) =>
+          `<button type="button" class="merge-opt-btn" data-ans="${escapeHtml(opt)}">
+            <span class="opt-badge">${letters[idx] || (idx + 1)}</span>
+            <code class="opt-code">${escapeHtml(opt)}</code>
+          </button>`
       )
       .join('');
 
@@ -889,21 +885,25 @@ function attemptMergeFix(candidate) {
   }
 }
 
-mergeCustomInput.addEventListener('input', () => {
-  if (!currentMergeChallenge) return;
-  const pct = Math.min(90, Math.floor((mergeCustomInput.value.length / currentMergeChallenge.correctAnswer.length) * 90));
-  p2p.sendToHost({ type: 'merge_progress', progress: pct });
-});
+if (mergeCustomInput) {
+  mergeCustomInput.addEventListener('input', () => {
+    if (!currentMergeChallenge) return;
+    const pct = Math.min(90, Math.floor((mergeCustomInput.value.length / currentMergeChallenge.correctAnswer.length) * 90));
+    p2p.sendToHost({ type: 'merge_progress', progress: pct });
+  });
 
-mergeCustomInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') {
-    attemptMergeFix(mergeCustomInput.value);
-  }
-});
+  mergeCustomInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      attemptMergeFix(mergeCustomInput.value);
+    }
+  });
+}
 
-btnSubmitMerge.addEventListener('click', () => {
-  attemptMergeFix(mergeCustomInput.value);
-});
+if (btnSubmitMerge) {
+  btnSubmitMerge.addEventListener('click', () => {
+    attemptMergeFix(mergeCustomInput?.value || '');
+  });
+}
 
 // 6. Atualização do HUD, Leaderboard e Pódio
 function updateHUD() {

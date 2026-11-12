@@ -1160,12 +1160,48 @@ export class GameEngine {
 
   pickUniqueTerminalSnippet() {
     const activeIds = new Set(this.snapshot.terminals.map((t) => t.snippetId));
-    const preferredPool =
-      this.roomSettings?.mode === 'casual'
+    const isCasual = this.roomSettings?.mode === 'casual';
+
+    // Ponderação dinâmica por nível dos jogadores e tempo de partida
+    const avgLevel =
+      this.snapshot.players.length > 0
+        ? this.snapshot.players.reduce((sum, p) => sum + (p.level || 1), 0) / this.snapshot.players.length
+        : 1;
+    const elapsed = this.snapshot.elapsedTime || 0;
+
+    let targetDiff = 'iniciante';
+    const roll = Math.random();
+    if (avgLevel <= 3 && elapsed < 80) {
+      // Início: predomínio total de questões iniciantes
+      targetDiff = roll < 0.85 ? 'iniciante' : 'intermediario';
+    } else if (avgLevel <= 6 && elapsed < 160) {
+      // Meio da partida: intermediárias tomam a frente
+      if (roll < 0.25) targetDiff = 'iniciante';
+      else if (roll < 0.80 || isCasual) targetDiff = 'intermediario';
+      else targetDiff = 'avancado';
+    } else {
+      // Endgame (Nível 7+ ou 160s+): questões avançadas e intermediárias
+      if (isCasual) {
+        targetDiff = roll < 0.35 ? 'iniciante' : 'intermediario';
+      } else {
+        if (roll < 0.10) targetDiff = 'iniciante';
+        else if (roll < 0.50) targetDiff = 'intermediario';
+        else targetDiff = 'avancado';
+      }
+    }
+
+    // Busca candidatos não repetidos e não ativos da dificuldade alvo
+    let diffPool = JS_SPEED_SNIPPETS.filter((s) => s.difficulty === targetDiff);
+    let candidates = diffPool.filter((s) => !this.usedTerminalIds.has(s.id) && !activeIds.has(s.id));
+
+    // Fallback para pool geral respeitando modo casual
+    if (candidates.length === 0) {
+      const preferredPool = isCasual
         ? JS_SPEED_SNIPPETS.filter((s) => s.difficulty !== 'avancado')
         : JS_SPEED_SNIPPETS;
+      candidates = preferredPool.filter((s) => !this.usedTerminalIds.has(s.id) && !activeIds.has(s.id));
+    }
 
-    let candidates = preferredPool.filter((s) => !this.usedTerminalIds.has(s.id) && !activeIds.has(s.id));
     if (candidates.length === 0) {
       candidates = JS_SPEED_SNIPPETS.filter((s) => !this.usedTerminalIds.has(s.id) && !activeIds.has(s.id));
     }

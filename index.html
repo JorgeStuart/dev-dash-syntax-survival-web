@@ -176,33 +176,49 @@
       </div>
     </div>
 
-    <!-- MODAL OPCIONAL DE TUTORIAL / COMO JOGAR -->
+    <!-- MODAL DE TUTORIAL / COMO JOGAR -->
     <div id="tutorial-modal" class="code-modal-backdrop hidden">
-      <div class="cyber-panel code-modal">
+      <div class="cyber-panel code-modal tutorial-modal-panel">
         <div class="modal-header">
           <div>
-            <span class="modal-badge green">📖 GUIA RÁPIDO DA SPRINT</span>
-            <h3>COMO SOBREVIVER E PROGRAMAR NA ARENA</h3>
+            <span class="modal-badge green">📖 TUTORIAL DE INÍCIO</span>
+            <h3>BEM-VINDO AO DEV DASH: SYNTAX SURVIVAL!</h3>
           </div>
-          <button id="btn-close-tutorial" type="button" class="cyber-btn small secondary">FECHAR [ESC]</button>
+          <button id="btn-close-tutorial" type="button" class="cyber-btn small secondary">✕ FECHAR [ESC]</button>
         </div>
         <div class="tutorial-grid">
           <div class="tutorial-card">
-            <strong>1. Movimento & Combate Automático</strong>
-            <p>Use <code>WASD</code> ou as Setas para circular pelo Data Center. Suas armas (Syntax Blaster, Orbitals, Firewall e Regex Lightning) atacam automaticamente os Bugs e Hackers mais próximos.</p>
+            <strong>🎮 1. Controles Simples (Celular & PC)</strong>
+            <p><strong>No Celular:</strong> Use o <strong>joystick virtual</strong> no canto inferior esquerdo para andar e toque no botão <strong>⌨️ CODAR [E]</strong> para abrir terminais.<br><strong>No PC:</strong> Ande com <code>WASD</code> / Setas e aperte <code>E</code> no terminal.</p>
           </div>
           <div class="tutorial-card">
-            <strong>2. Terminais JS & Efeitos na Arena</strong>
-            <p>Aproxime-se de um terminal e veja <strong>antes de entrar</strong> a recompensa e o efeito temático (<em>Purge de Bugs</em>, <em>Overclock Assíncrono</em>, <em>Garbage Collector</em> ou <em>Logic Firewall</em>). Aperte <code>E</code> para entrar. Há 4 modalidades: Digitação, Completar Expressão, Identificar Bug e Corrigir Trecho.</p>
+            <strong>✨ 2. Desafios 100% Múltipla Escolha</strong>
+            <p>Não precisa digitar código no teclado! Todos os desafios agora são <strong>múltipla escolha</strong>: basta ler a pergunta e tocar na alternativa correta com a sintaxe certa de JavaScript.</p>
           </div>
           <div class="tutorial-card">
-            <strong>3. Escudo de Foco (18s) & Recarga (6s)</strong>
-            <p>Enquanto resolve um terminal, o <strong>Piloto Automático</strong> assume por até <strong>18 segundos</strong> com imunidade a dano (aviso nos últimos 5s). Ao concluir ou apertar <code>ESC</code>, há uma recarga de <strong>6 segundos</strong> antes do próximo terminal.</p>
+            <strong>⭐ 3. Nível Progressivo de Perguntas</strong>
+            <p>A dificuldade das perguntas evolui com a sua partida:<br>
+            • <strong>Nível 1 a 3:</strong> <em>Iniciante</em> (arrays, objetos, operações básicas)<br>
+            • <strong>Nível 4 a 6:</strong> <em>Intermediário</em> (reduce, destructuring, promises)<br>
+            • <strong>Nível 7+:</strong> <em>Avançado</em> (async/await, closures, fallbacks)</p>
           </div>
           <div class="tutorial-card">
-            <strong>4. Merge Conflict & Monólito Coletivo</strong>
-            <p>Na sirene de Merge, todos ficam protegidos: o 1º acerto ganha <strong>+300 Commits</strong> e os demais <strong>+240 Commits</strong> (+130 XP para todos, sem punição ao último). Cada acerto de código golpeia e aplica vulnerabilidade ao <strong>Monólito de Conflito Git</strong> na arena para a equipe derrotá-lo junta!</p>
+            <strong>🛡️ 4. Escudo de Foco (Sem Dano!)</strong>
+            <p>Ao abrir um terminal de código ou durante o evento global de <strong>Merge Conflict</strong>, seu personagem fica parado e recebe um <strong>Escudo de Foco</strong>: você fica 100% imune a dano dos monstros enquanto escolhe a resposta!</p>
           </div>
+          <div class="tutorial-card">
+            <strong>⚔️ 5. Ataque Automático & Upgrades</strong>
+            <p>Suas armas atiram sozinhas nos bugs próximos. Derrote inimigos para coletar orbes de XP, subir de nível e desbloquear upgrades de ataque, firewall e cadência!</p>
+          </div>
+          <div class="tutorial-card">
+            <strong>💥 6. Efeitos na Arena & Commits</strong>
+            <p>Cada acerto de terminal libera buffs poderosos na arena (<em>Purga de Bugs</em>, <em>Overclock de Cadência</em>, <em>Cura</em> ou <em>Firewall</em>) e soma Commits para vencer a Sprint!</p>
+          </div>
+        </div>
+        <div class="tutorial-action-row">
+          <button id="btn-start-tutorial-play" type="button" class="cyber-btn start-btn full-width">
+            🚀 ENTENDI, VAMOS AO JOGO!
+          </button>
         </div>
       </div>
     </div>
@@ -296,17 +312,17 @@
       </div>
     </div>
 
-    <!-- MODAL 1: TERMINAL DE DESAFIOS JS (4 MODALIDADES + EFEITO NA ARENA) -->
+    <!-- MODAL 1: TERMINAL DE DESAFIOS JS (MÚLTIPLA ESCOLHA + EFEITO NA ARENA) -->
     <div id="terminal-modal" class="code-modal-backdrop hidden">
       <div class="cyber-panel code-modal terminal-theme">
         <div class="modal-header">
           <div>
             <div class="terminal-badges-row">
-              <span id="terminal-mode-badge" class="modal-badge green">💻 DIGITAÇÃO JS</span>
-              <span id="terminal-topic-badge" class="modal-badge cyan">ARRAYS • INICIANTE</span>
+              <span id="terminal-mode-badge" class="modal-badge green">✨ MÚLTIPLA ESCOLHA</span>
+              <span id="terminal-topic-badge" class="modal-badge cyan">ARRAYS • ⭐ INICIANTE</span>
               <span id="terminal-effect-badge" class="modal-badge amber">💥 EFEITO NA ARENA</span>
             </div>
-            <h3 id="terminal-modal-title">TERMINAL DE DEPLOY</h3>
+            <h3 id="terminal-modal-title">DESAFIO DE SINTAXE JS</h3>
           </div>
           <div id="terminal-focus-timer" class="shield-pill">🛡️ FOCO POR ATÉ 18s • ESC PARA SAIR</div>
         </div>
@@ -315,34 +331,15 @@
 
         <pre id="terminal-context-code" class="buggy-code-block hidden"></pre>
 
-        <div id="terminal-options" class="merge-options-grid hidden"></div>
-
-        <div class="code-editor-box">
-          <div class="editor-statusbar">
-            <span id="terminal-editor-filename">patch_hotfix.js</span>
-            <span id="terminal-progress-pct">0%</span>
-          </div>
-          <div id="terminal-target-code" class="target-code-display"></div>
-          <div class="terminal-input-row">
-            <input
-              id="terminal-hidden-input"
-              type="text"
-              class="code-live-input"
-              placeholder="Digite a solução JavaScript aqui (ou pressione Enter)..."
-              autocomplete="off"
-              autocapitalize="off"
-              spellcheck="false"
-            />
-            <button id="btn-submit-terminal" type="button" class="cyber-btn small primary">
-              CONFIRMAR [ENTER]
-            </button>
-          </div>
+        <div class="options-selection-box">
+          <div class="field-label">SELECIONE A ALTERNATIVA CORRETA:</div>
+          <div id="terminal-options" class="merge-options-grid"></div>
         </div>
 
         <div id="terminal-feedback" class="merge-feedback"></div>
 
         <div class="modal-footer">
-          <span class="hint-text">Dica: Em exercícios de correção, soluções JS equivalentes também são aceitas!</span>
+          <span class="hint-text">💡 Dica: Toque ou clique na alternativa correta para aplicar o patch imediatamente!</span>
           <button id="btn-close-terminal" class="cyber-btn small danger">[ESC] Sair do Terminal</button>
         </div>
       </div>
@@ -369,23 +366,8 @@
             <pre id="merge-buggy-code" class="buggy-code-block"></pre>
 
             <div class="fix-section">
-              <label class="field-label">ESCOLHA OU DIGITE UMA SOLUÇÃO EQUIVALENTE:</label>
+              <label class="field-label">SELECIONE A CORREÇÃO DO BUG:</label>
               <div id="merge-options" class="merge-options-grid"></div>
-
-              <div class="custom-fix-row">
-                <span>Ou digite a expressão corrigida (soluções equivalentes são aceitas):</span>
-                <div class="join-row">
-                  <input
-                    id="merge-custom-input"
-                    type="text"
-                    class="cyber-input mono"
-                    placeholder="Ex: return a + b;"
-                    autocomplete="off"
-                    spellcheck="false"
-                  />
-                  <button id="btn-submit-merge" class="cyber-btn primary">GIT PUSH</button>
-                </div>
-              </div>
               <div id="merge-feedback" class="merge-feedback"></div>
             </div>
           </div>
