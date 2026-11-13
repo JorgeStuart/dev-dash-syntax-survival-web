@@ -72,6 +72,11 @@ const explanationToastText = document.getElementById('explanation-toast-text');
 const btnCloseExplanation = document.getElementById('btn-close-explanation');
 const upgradeDrawer = document.getElementById('upgrade-drawer');
 const upgradeCardsEl = document.getElementById('upgrade-cards');
+const btnLeaveMatch = document.getElementById('btn-leave-match');
+const leaveModal = document.getElementById('leave-modal');
+const btnConfirmLeave = document.getElementById('btn-confirm-leave');
+const btnCancelLeave = document.getElementById('btn-cancel-leave');
+const btnCancelLeaveX = document.getElementById('btn-cancel-leave-x');
 
 // Elementos DOM — Terminal Modal
 const terminalModal = document.getElementById('terminal-modal');
@@ -575,6 +580,7 @@ function enterMatchUI() {
   if (explanationToast) explanationToast.classList.add('hidden');
   keysDown.clear();
   if (tutorialModal) tutorialModal.classList.add('hidden');
+  if (leaveModal) leaveModal.classList.add('hidden');
   terminalModal.classList.add('hidden');
   mergeModal.classList.add('hidden');
   activeMergeChallengeId = null;
@@ -585,6 +591,73 @@ function enterMatchUI() {
   sfx.levelUp();
 }
 
+function openLeaveModal() {
+  if (!isPlaying) return;
+  if (leaveModal) leaveModal.classList.remove('hidden');
+  sfx.keyHit();
+}
+
+function hideLeaveModal() {
+  if (leaveModal) leaveModal.classList.add('hidden');
+  sfx.keyHit();
+}
+
+function leaveMatchToLobby() {
+  isPlaying = false;
+  activeTerminalId = null;
+  activeSnippet = null;
+  activeMergeChallengeId = null;
+  terminalCooldownUntil = 0;
+  if (explanationTimeoutId) clearTimeout(explanationTimeoutId);
+  if (explanationToast) explanationToast.classList.add('hidden');
+  keysDown.clear();
+  touchMoveVec.dx = 0;
+  touchMoveVec.dy = 0;
+
+  if (leaveModal) leaveModal.classList.add('hidden');
+  if (terminalModal) terminalModal.classList.add('hidden');
+  if (mergeModal) mergeModal.classList.add('hidden');
+  if (podiumScreen) podiumScreen.classList.add('hidden');
+  if (gameHud) gameHud.classList.add('hidden');
+
+  p2p.cleanup();
+  engine.snapshot = engine.createEmptySnapshot();
+  currentSnapshot = engine.snapshot;
+
+  lobbyScreen.classList.remove('hidden');
+  connectionStatus.textContent = 'Você abandonou a partida e retornou ao Menu Inicial.';
+  connectionStatus.style.color = '#38bdf8';
+  syncLobbySelectionUI();
+  sfx.keyHit();
+}
+
+if (btnLeaveMatch) {
+  btnLeaveMatch.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openLeaveModal();
+  });
+}
+if (btnConfirmLeave) {
+  btnConfirmLeave.addEventListener('click', () => {
+    leaveMatchToLobby();
+  });
+}
+if (btnCancelLeave) {
+  btnCancelLeave.addEventListener('click', () => {
+    hideLeaveModal();
+  });
+}
+if (btnCancelLeaveX) {
+  btnCancelLeaveX.addEventListener('click', () => {
+    hideLeaveModal();
+  });
+}
+if (leaveModal) {
+  leaveModal.addEventListener('click', (e) => {
+    if (e.target === leaveModal) hideLeaveModal();
+  });
+}
+
 // 3. Inputs de Movimento e Atalhos
 window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && tutorialModal && !tutorialModal.classList.contains('hidden')) {
@@ -592,10 +665,20 @@ window.addEventListener('keydown', (e) => {
     return;
   }
 
+  if (e.key === 'Escape' && leaveModal && !leaveModal.classList.contains('hidden')) {
+    hideLeaveModal();
+    return;
+  }
+
   if (!isPlaying) return;
 
   if (e.key === 'Escape' && activeTerminalId !== null) {
     closeTerminalModal();
+    return;
+  }
+
+  if (e.key === 'Escape') {
+    openLeaveModal();
     return;
   }
 
@@ -742,7 +825,7 @@ if (btnTouchActionEl) {
 }
 
 function computeLocalInput() {
-  if (activeTerminalId !== null || !mergeModal.classList.contains('hidden')) {
+  if (activeTerminalId !== null || !mergeModal.classList.contains('hidden') || (leaveModal && !leaveModal.classList.contains('hidden'))) {
     return { dx: 0, dy: 0 };
   }
   let dx = touchMoveVec.dx;
@@ -1240,13 +1323,16 @@ function gameLoop(now) {
     p2p.sendToHost({ type: 'player_input', input: localInput });
 
     if (p2p.isHost) {
-      engine.tick(dt);
-      currentSnapshot = engine.snapshot;
+      const isLeaveModalOpen = leaveModal && !leaveModal.classList.contains('hidden');
+      if (!isLeaveModalOpen) {
+        engine.tick(dt);
+        currentSnapshot = engine.snapshot;
 
-      netSyncAccum += dt;
-      if (netSyncAccum >= 0.04) {
-        netSyncAccum = 0;
-        p2p.broadcastSnapshot(currentSnapshot);
+        netSyncAccum += dt;
+        if (netSyncAccum >= 0.04) {
+          netSyncAccum = 0;
+          p2p.broadcastSnapshot(currentSnapshot);
+        }
       }
     }
 

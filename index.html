@@ -270,7 +270,12 @@
 
         <!-- Sprint Timer, Merge Conflict Alert & Shared Boss Bar -->
         <div class="hud-box center-hud">
-          <div class="sprint-label">SPRINT TIMER</div>
+          <div class="sprint-header-row">
+            <span class="sprint-label">SPRINT TIMER</span>
+            <button id="btn-leave-match" type="button" class="btn-leave-hud" title="Abandonar Partida e Voltar ao Menu [ESC]">
+              🚪 SAIR
+            </button>
+          </div>
           <div id="hud-timer" class="sprint-timer">05:00</div>
           <div class="merge-countdown-wrap">
             <span>Próximo Merge Conflict PvP:</span>
@@ -371,6 +376,33 @@
             <span class="clean-race-label">Corrida de Deploy da Equipe:</span>
             <ul id="merge-race-list" class="clean-race-chips"></ul>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL 4: CONFIRMAR SAÍDA / ABANDONAR PARTIDA -->
+    <div id="leave-modal" class="code-modal-backdrop hidden">
+      <div class="cyber-panel code-modal clean-leave-card">
+        <div class="clean-quiz-header">
+          <span class="clean-badge red">⚠️ ABANDONAR SPRINT</span>
+          <button id="btn-cancel-leave-x" type="button" class="clean-close-btn" title="Continuar Jogando [ESC]">✕</button>
+        </div>
+
+        <div class="leave-modal-body">
+          <div class="leave-hero-icon">🚪</div>
+          <h3 class="leave-modal-title">Deseja abandonar a partida?</h3>
+          <p class="leave-modal-desc">
+            Seu progresso atual na Sprint será encerrado e você voltará para o Menu Inicial / Lobby.
+          </p>
+        </div>
+
+        <div class="leave-modal-actions">
+          <button id="btn-cancel-leave" type="button" class="cyber-btn secondary">
+            ▶ CONTINUAR JOGANDO
+          </button>
+          <button id="btn-confirm-leave" type="button" class="cyber-btn danger">
+            🚪 SIM, ABANDONAR
+          </button>
         </div>
       </div>
     </div>
