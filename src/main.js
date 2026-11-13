@@ -286,24 +286,18 @@ function setTutorialStep(step) {
   }
 }
 
-function openTutorial(onFinish = null) {
-  tutorialPendingStart = onFinish;
+function openTutorial() {
   setTutorialStep(1);
   if (tutorialModal) tutorialModal.classList.remove('hidden');
 }
 
-const TUTORIAL_STORAGE_KEY = 'devdash_tutorial_v2';
+const TUTORIAL_STORAGE_KEY = 'devdash_tutorial_v3';
 
 function dismissTutorial() {
   try {
     localStorage.setItem(TUTORIAL_STORAGE_KEY, 'true');
   } catch (_) {}
   if (tutorialModal) tutorialModal.classList.add('hidden');
-  if (typeof tutorialPendingStart === 'function') {
-    const cb = tutorialPendingStart;
-    tutorialPendingStart = null;
-    cb();
-  }
 }
 
 if (btnOpenTutorial) {
@@ -337,11 +331,11 @@ if (btnTutorialPrev) {
   });
 }
 
-// Auto-abrir tutorial na primeira visita da versão v2
+// Auto-abrir tutorial na primeira visita da versão v3 (renderizado na frente do lobby com z-index 70)
 try {
   if (!localStorage.getItem(TUTORIAL_STORAGE_KEY)) {
     setTimeout(() => {
-      openTutorial(startMatchNow);
+      openTutorial();
     }, 350);
   }
 } catch (_) {}
@@ -509,48 +503,57 @@ btnCopyLink.addEventListener('click', () => {
 });
 
 function startMatchNow() {
-  const name = playerNameInput.value.trim() || 'Dev_Master';
+  try {
+    const name = playerNameInput.value.trim() || 'Dev_Master';
 
-  // Se ainda não criou sala nem é Host, inicializa o Host local imediatamente
-  if (!p2p.isHost) {
-    p2p.cleanup();
-    p2p.isHost = true;
-    p2p.roomCode = `DASH-${Math.floor(1000 + Math.random() * 9000)}`;
-    p2p.myId = `devdash-syntax-${p2p.roomCode.toLowerCase()}`;
-    p2p.lobbyPlayers = [
-      {
-        id: p2p.myId,
-        name: name,
-        devClass: selectedClass,
-        color: selectedColor,
-        isHost: true,
-        isBot: false,
-      },
-    ];
+    // Se ainda não criou sala nem é Host, inicializa o Host local imediatamente
+    if (!p2p.isHost || !p2p.lobbyPlayers || p2p.lobbyPlayers.length === 0) {
+      p2p.cleanup();
+      p2p.isHost = true;
+      p2p.roomCode = `DASH-${Math.floor(1000 + Math.random() * 9000)}`;
+      p2p.myId = `devdash-syntax-${p2p.roomCode.toLowerCase()}`;
+      p2p.lobbyPlayers = [
+        {
+          id: p2p.myId,
+          name: name,
+          devClass: selectedClass,
+          color: selectedColor,
+          isHost: true,
+          isBot: false,
+        },
+      ];
+    } else {
+      const me = p2p.lobbyPlayers.find((p) => p.id === p2p.myId) || p2p.lobbyPlayers[0];
+      if (me) {
+        me.name = name;
+        me.devClass = selectedClass;
+        me.color = selectedColor;
+      }
+    }
+
+    if (selRoomMode && selBotDifficulty) {
+      p2p.roomSettings = {
+        mode: selRoomMode.value || 'casual',
+        botDifficulty: selBotDifficulty.value || 'normal',
+      };
+    }
+
+    const fillBots = chkFillBots ? chkFillBots.checked : true;
+    engine.startNewMatch(p2p.lobbyPlayers, fillBots, p2p.roomSettings);
+    currentSnapshot = engine.snapshot;
+    p2p.broadcastMatchStart(currentSnapshot);
+
+    enterMatchUI();
+  } catch (err) {
+    console.error('Erro ao iniciar partida:', err);
+    connectionStatus.textContent = `Erro ao iniciar partida: ${err?.message || err}`;
+    connectionStatus.style.color = '#ff3344';
   }
-
-  if (selRoomMode && selBotDifficulty) {
-    p2p.roomSettings = {
-      mode: selRoomMode.value || 'casual',
-      botDifficulty: selBotDifficulty.value || 'normal',
-    };
-  }
-
-  const fillBots = chkFillBots ? chkFillBots.checked : true;
-  engine.startNewMatch(p2p.lobbyPlayers, fillBots, p2p.roomSettings);
-  currentSnapshot = engine.snapshot;
-  p2p.broadcastMatchStart(currentSnapshot);
-
-  enterMatchUI();
 }
 
 if (btnQuickPlay) {
   btnQuickPlay.addEventListener('click', () => {
     sfx.keyHit();
-    if (!localStorage.getItem(TUTORIAL_STORAGE_KEY)) {
-      openTutorial(startMatchNow);
-      return;
-    }
     startMatchNow();
   });
 }
