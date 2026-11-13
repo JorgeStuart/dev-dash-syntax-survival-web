@@ -43,6 +43,7 @@ const selBotDifficulty = document.getElementById('sel-bot-difficulty');
 const clientWaitMsg = document.getElementById('client-wait-msg');
 const chkFillBots = document.getElementById('chk-fill-bots');
 const btnStartMatch = document.getElementById('btn-start-match');
+const btnQuickPlay = document.getElementById('btn-quick-play');
 
 // Elementos DOM — HUD
 const gameHud = document.getElementById('game-hud');
@@ -318,6 +319,7 @@ if (btnStartTutorialPlay) {
   btnStartTutorialPlay.addEventListener('click', () => {
     sfx.keyHit();
     dismissTutorial();
+    startMatchNow();
   });
 }
 if (btnTutorialNext) {
@@ -504,30 +506,55 @@ btnCopyLink.addEventListener('click', () => {
   });
 });
 
-btnStartMatch.addEventListener('click', () => {
-  if (!p2p.isHost) return;
+function startMatchNow() {
+  const name = playerNameInput.value.trim() || 'Dev_Master';
 
-  const startSprint = () => {
-    if (selRoomMode && selBotDifficulty) {
-      p2p.updateRoomSettings({
-        mode: selRoomMode.value || 'casual',
-        botDifficulty: selBotDifficulty.value || 'normal',
-      });
-    }
-    engine.startNewMatch(p2p.lobbyPlayers, chkFillBots.checked, p2p.roomSettings);
-    currentSnapshot = engine.snapshot;
-    p2p.broadcastMatchStart(currentSnapshot);
-    enterMatchUI();
-  };
-
-  // Se o jogador ainda não viu o tutorial, abre o tutorial antes de iniciar a partida!
-  if (!localStorage.getItem('devdash_tutorial_seen')) {
-    openTutorial(startSprint);
-    return;
+  // Se ainda não criou sala nem é Host, inicializa o Host local imediatamente
+  if (!p2p.isHost) {
+    p2p.cleanup();
+    p2p.isHost = true;
+    p2p.roomCode = `DASH-${Math.floor(1000 + Math.random() * 9000)}`;
+    p2p.myId = `devdash-syntax-${p2p.roomCode.toLowerCase()}`;
+    p2p.lobbyPlayers = [
+      {
+        id: p2p.myId,
+        name: name,
+        devClass: selectedClass,
+        color: selectedColor,
+        isHost: true,
+        isBot: false,
+      },
+    ];
   }
 
-  startSprint();
-});
+  if (selRoomMode && selBotDifficulty) {
+    p2p.roomSettings = {
+      mode: selRoomMode.value || 'casual',
+      botDifficulty: selBotDifficulty.value || 'normal',
+    };
+  }
+
+  const fillBots = chkFillBots ? chkFillBots.checked : true;
+  engine.startNewMatch(p2p.lobbyPlayers, fillBots, p2p.roomSettings);
+  currentSnapshot = engine.snapshot;
+  p2p.broadcastMatchStart(currentSnapshot);
+
+  enterMatchUI();
+}
+
+if (btnQuickPlay) {
+  btnQuickPlay.addEventListener('click', () => {
+    sfx.keyHit();
+    startMatchNow();
+  });
+}
+
+if (btnStartMatch) {
+  btnStartMatch.addEventListener('click', () => {
+    sfx.keyHit();
+    startMatchNow();
+  });
+}
 
 function enterMatchUI() {
   isPlaying = true;
