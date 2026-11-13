@@ -292,9 +292,11 @@ function openTutorial(onFinish = null) {
   if (tutorialModal) tutorialModal.classList.remove('hidden');
 }
 
+const TUTORIAL_STORAGE_KEY = 'devdash_tutorial_v2';
+
 function dismissTutorial() {
   try {
-    localStorage.setItem('devdash_tutorial_seen', 'true');
+    localStorage.setItem(TUTORIAL_STORAGE_KEY, 'true');
   } catch (_) {}
   if (tutorialModal) tutorialModal.classList.add('hidden');
   if (typeof tutorialPendingStart === 'function') {
@@ -335,12 +337,12 @@ if (btnTutorialPrev) {
   });
 }
 
-// Auto-abrir tutorial na primeira visita
+// Auto-abrir tutorial na primeira visita da versão v2
 try {
-  if (!localStorage.getItem('devdash_tutorial_seen')) {
+  if (!localStorage.getItem(TUTORIAL_STORAGE_KEY)) {
     setTimeout(() => {
-      openTutorial();
-    }, 400);
+      openTutorial(startMatchNow);
+    }, 350);
   }
 } catch (_) {}
 
@@ -545,6 +547,10 @@ function startMatchNow() {
 if (btnQuickPlay) {
   btnQuickPlay.addEventListener('click', () => {
     sfx.keyHit();
+    if (!localStorage.getItem(TUTORIAL_STORAGE_KEY)) {
+      openTutorial(startMatchNow);
+      return;
+    }
     startMatchNow();
   });
 }
